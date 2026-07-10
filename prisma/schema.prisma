@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ------------------------------------------------------------------ */
+/* Auth.js (NextAuth v5) models — see authjs.dev/getting-started/adapters/prisma */
+/* ------------------------------------------------------------------ */
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  memberships    TripMember[]
+  invitesCreated Invite[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+/* ------------------------------------------------------------------ */
+/* Travel planner domain models                                        */
+/* ------------------------------------------------------------------ */
+
+model Trip {
+  id          String   @id @default(cuid())
+  title       String
+  destination String
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  totalBudget Decimal? @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members TripMember[]
+  days    TripDay[]
+  invites Invite[]
+}
+
+enum TripRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+model TripMember {
+  id        String   @id @default(cuid())
+  role      TripRole @default(VIEWER)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  // A user can only be a member of a trip once
+  @@unique([userId, tripId])
+  @@index([tripId])
+  @@index([userId])
+}
+
+model Invite {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  role      TripRole @default(VIEWER)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  createdBy String
+  creator   User   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+model TripDay {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  activities Activity[]
+
+  // A trip can only have one entry per calendar day
+  @@unique([tripId, date])
+  @@index([tripId])
+}
+
+model Activity {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  time         DateTime?
+  locationName String?
+  latitude     Float?
+  longitude    Float?
+  cost         Decimal?  @db.Decimal(12, 2)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tripDayId String
+  tripDay   TripDay @relation(fields: [tripDayId], references: [id], onDelete: Cascade)
+
+  @@index([tripDayId])
+}

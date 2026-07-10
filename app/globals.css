@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+
+  /* Roam palette */
+  --color-cream: #f4f1e9;
+  --color-ink: #22281f;
+  --color-pine: #0f5d45;
+  --color-pine-dark: #0a4433;
+  --color-pine-soft: #e3eee7;
+  --color-clay: #c87f4a;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}

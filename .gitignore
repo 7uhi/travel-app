@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files (DATABASE_URL etc.)
+.env
+.env.*
+!.env.example
+
+# python venv accidentally created here
+myenv/
+
+# misc
+.DS_Store
