@@ -44,6 +44,8 @@ export interface Trip {
   /** ISO date string */
   endDate: string;
   totalBudget: number | null;
+  /** ISO 4217 code; all expenses on the trip use this currency. */
+  currency: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,10 +96,101 @@ export interface TripDayWithActivities extends TripDay {
   activities: Activity[];
 }
 
+/** Compact card data returned by getMyTrips. */
+export interface TripSummary {
+  id: string;
+  title: string;
+  destination: string;
+  /** ISO date string */
+  startDate: string;
+  /** ISO date string */
+  endDate: string;
+  /** The requesting user's role on this trip. */
+  role: TripRole;
+  memberCount: number;
+  dayCount: number;
+}
+
 /** The full trip payload returned by getTripById, after serialization. */
 export interface TripWithDays extends Trip {
   days: TripDayWithActivities[];
   members: TripMemberWithUser[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Expense splitting — all money as integer cents                       */
+/* ------------------------------------------------------------------ */
+
+export type ExpenseCategory =
+  | "FOOD"
+  | "TRANSPORT"
+  | "LODGING"
+  | "ACTIVITY"
+  | "SHOPPING"
+  | "OTHER";
+
+export type SplitInput =
+  | { mode: "EQUAL"; participantIds: string[] }
+  | { mode: "EXACT"; shares: { userId: string; amountCents: number }[] }
+  | { mode: "PERCENT"; shares: { userId: string; percent: number }[] };
+
+export interface ExpenseInput {
+  description: string;
+  amountCents: number;
+  category: ExpenseCategory;
+  /** ISO date */
+  date: string;
+  /** Defaults to the signed-in user; must be a trip member. */
+  paidById?: string;
+  split: SplitInput;
+}
+
+export interface ExpenseWithDetails {
+  id: string;
+  tripId: string;
+  description: string;
+  amountCents: number;
+  currency: string;
+  category: ExpenseCategory;
+  /** ISO date */
+  date: string;
+  createdAt: string;
+  paidBy: { id: string; name: string | null; image: string | null };
+  splits: {
+    userId: string;
+    amountCents: number;
+    user: { id: string; name: string | null; image: string | null };
+  }[];
+}
+
+export interface SettlementRecord {
+  id: string;
+  tripId: string;
+  fromUserId: string;
+  toUserId: string;
+  amountCents: number;
+  /** ISO datetime */
+  date: string;
+}
+
+export interface MemberBalance {
+  userId: string;
+  name: string | null;
+  image: string | null;
+  /** Positive = is owed money; negative = owes money. */
+  netCents: number;
+}
+
+export interface SuggestedPayment {
+  fromUserId: string;
+  toUserId: string;
+  amountCents: number;
+}
+
+export interface TripBalances {
+  currency: string;
+  members: MemberBalance[];
+  suggestedPayments: SuggestedPayment[];
 }
 
 /* ------------------------------------------------------------------ */

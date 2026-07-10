@@ -16,6 +16,13 @@ export function formatCurrency(amount: number, currency = "EUR"): string {
   }).format(amount);
 }
 
+/** Integer cents → "€45.00". Intl handles 0-decimal currencies like JPY. */
+export function formatCents(cents: number, currency = "EUR"): string {
+  return new Intl.NumberFormat("en", { style: "currency", currency }).format(
+    cents / 100,
+  );
+}
+
 /** "Sat, Sep 12" */
 export function formatDayDate(iso: string): string {
   return new Intl.DateTimeFormat("en", {

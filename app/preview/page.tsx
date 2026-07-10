@@ -59,6 +59,7 @@ const mockTrip: TripWithDays = {
   startDate: "2026-09-12T00:00:00.000Z",
   endDate: "2026-09-18T00:00:00.000Z",
   totalBudget: 2000,
+  currency: "EUR",
   createdAt: T,
   updatedAt: T,
   members: [
@@ -208,5 +209,8 @@ const mockTrip: TripWithDays = {
 
 export default function PreviewPage() {
   // OWNER so owner-only UI (e.g. the Share button) is visible in the demo.
-  return <TripDashboard trip={mockTrip} currentUserRole="OWNER" />;
+  // Tabs are hidden because the mock trip has no real routes behind them.
+  return (
+    <TripDashboard trip={mockTrip} currentUserRole="OWNER" showTabs={false} />
+  );
 }
