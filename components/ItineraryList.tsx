@@ -1,18 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, MapPin } from "lucide-react";
+import { ChevronDown, MapPin, Pencil, Plus } from "lucide-react";
 
+import { ActivityDialog } from "@/components/itinerary/ActivityDialog";
 import { formatCurrency, formatDayDate, formatTime } from "@/lib/format";
 import type { Activity, TripDayWithActivities } from "@/types";
 
 interface ItineraryListProps {
   days: TripDayWithActivities[];
   currency?: string;
+  /** OWNER/EDITOR viewers get add/edit affordances; viewers are read-only. */
+  canEdit?: boolean;
 }
 
-export function ItineraryList({ days, currency = "EUR" }: ItineraryListProps) {
+interface DialogState {
+  day: TripDayWithActivities;
+  activity: Activity | null;
+}
+
+export function ItineraryList({
+  days,
+  currency = "EUR",
+  canEdit = false,
+}: ItineraryListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [dialog, setDialog] = useState<DialogState | null>(null);
 
   if (days.length === 0) {
     return (
@@ -59,11 +72,22 @@ export function ItineraryList({ days, currency = "EUR" }: ItineraryListProps) {
             day={day}
             dayNumber={index + 1}
             currency={currency}
+            canEdit={canEdit}
             isCollapsed={Boolean(collapsed[day.id])}
             onToggle={() => toggleDay(day.id)}
+            onAdd={() => setDialog({ day, activity: null })}
+            onEdit={(activity) => setDialog({ day, activity })}
           />
         ))}
       </ol>
+
+      {dialog && (
+        <ActivityDialog
+          day={dialog.day}
+          activity={dialog.activity}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </div>
   );
 }
@@ -72,14 +96,20 @@ function DayCard({
   day,
   dayNumber,
   currency,
+  canEdit,
   isCollapsed,
   onToggle,
+  onAdd,
+  onEdit,
 }: {
   day: TripDayWithActivities;
   dayNumber: number;
   currency: string;
+  canEdit: boolean;
   isCollapsed: boolean;
   onToggle: () => void;
+  onAdd: () => void;
+  onEdit: (activity: Activity) => void;
 }) {
   const dayCost = day.activities.reduce((sum, a) => sum + (a.cost ?? 0), 0);
   const count = day.activities.length;
@@ -123,24 +153,43 @@ function DayCard({
         />
       </button>
 
-      {!isCollapsed &&
-        (count === 0 ? (
-          <div className="px-5 pb-5">
-            <p className="rounded-xl border border-dashed border-stone-200 px-4 py-3 text-sm text-stone-500">
-              Nothing planned yet.
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-stone-100 border-t border-stone-100">
-            {day.activities.map((activity) => (
-              <ActivityRow
-                key={activity.id}
-                activity={activity}
-                currency={currency}
-              />
-            ))}
-          </ul>
-        ))}
+      {!isCollapsed && (
+        <>
+          {count === 0 ? (
+            !canEdit && (
+              <div className="px-5 pb-5">
+                <p className="rounded-xl border border-dashed border-stone-200 px-4 py-3 text-sm text-stone-500">
+                  Nothing planned yet.
+                </p>
+              </div>
+            )
+          ) : (
+            <ul className="divide-y divide-stone-100 border-t border-stone-100">
+              {day.activities.map((activity) => (
+                <ActivityRow
+                  key={activity.id}
+                  activity={activity}
+                  currency={currency}
+                  onEdit={canEdit ? () => onEdit(activity) : undefined}
+                />
+              ))}
+            </ul>
+          )}
+
+          {canEdit && (
+            <div className={`px-5 pb-4 ${count === 0 ? "" : "pt-3"}`}>
+              <button
+                type="button"
+                onClick={onAdd}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-500 transition-colors hover:border-pine hover:text-pine"
+              >
+                <Plus size={15} />
+                Add activity
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </li>
   );
 }
@@ -148,12 +197,14 @@ function DayCard({
 function ActivityRow({
   activity,
   currency,
+  onEdit,
 }: {
   activity: Activity;
   currency: string;
+  onEdit?: () => void;
 }) {
   return (
-    <li className="flex gap-4 px-5 py-4">
+    <li className="group flex gap-4 px-5 py-4">
       <div className="w-14 shrink-0 pt-0.5">
         {activity.time ? (
           <span className="inline-block rounded-md bg-stone-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-stone-600">
@@ -183,6 +234,17 @@ function ActivityRow({
         <p className="shrink-0 pt-0.5 text-sm font-medium tabular-nums text-stone-600">
           {formatCurrency(activity.cost, currency)}
         </p>
+      )}
+
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={`Edit ${activity.title}`}
+          className="shrink-0 self-start rounded-full p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-ink sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus:opacity-100"
+        >
+          <Pencil size={14} />
+        </button>
       )}
     </li>
   );

@@ -31,7 +31,13 @@ export function TripDashboard({
       <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <h2 className="mb-4 font-display text-2xl">Itinerary</h2>
-          <ItineraryList days={trip.days} currency={trip.currency} />
+          <ItineraryList
+            days={trip.days}
+            currency={trip.currency}
+            canEdit={
+              currentUserRole === "OWNER" || currentUserRole === "EDITOR"
+            }
+          />
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-8">

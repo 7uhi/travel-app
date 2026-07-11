@@ -187,30 +187,8 @@ export async function addActivityToDay(
 
   if (!tripDayId) return fail("Trip day id is required.");
 
-  const title = data.title?.trim();
-  if (!title) return fail("Activity title is required.");
-
-  let time: Date | null = null;
-  if (data.time != null) {
-    time = parseDateTime(data.time);
-    if (!time) return fail("Time must be a valid ISO datetime string.");
-  }
-
-  const hasLatitude = data.latitude != null;
-  const hasLongitude = data.longitude != null;
-  if (hasLatitude !== hasLongitude) {
-    return fail("Latitude and longitude must be provided together.");
-  }
-  if (hasLatitude && (data.latitude! < -90 || data.latitude! > 90)) {
-    return fail("Latitude must be between -90 and 90.");
-  }
-  if (hasLongitude && (data.longitude! < -180 || data.longitude! > 180)) {
-    return fail("Longitude must be between -180 and 180.");
-  }
-
-  if (data.cost != null && (!Number.isFinite(data.cost) || data.cost < 0)) {
-    return fail("Cost must be a non-negative number.");
-  }
+  const parsed = parseActivityFields(data);
+  if ("error" in parsed) return fail(parsed.error);
 
   try {
     const tripDay = await prisma.tripDay.findUnique({
@@ -233,16 +211,7 @@ export async function addActivityToDay(
     }
 
     const activity = await prisma.activity.create({
-      data: {
-        title,
-        description: data.description,
-        time,
-        locationName: data.locationName,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        cost: data.cost,
-        tripDayId,
-      },
+      data: { ...parsed, tripDayId },
     });
 
     revalidatePath(`/trips/${tripDay.tripId}`);
@@ -260,10 +229,160 @@ export async function addActivityToDay(
   }
 }
 
+/**
+ * Updates an activity's fields. Requires OWNER or EDITOR membership on the
+ * activity's trip — the itinerary is collaborative, so any editor may change
+ * any activity (activities deliberately have no creator column).
+ */
+export async function updateActivity(
+  activityId: string,
+  data: AddActivityInput,
+): Promise<ActionResult<Activity>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to edit this trip.");
+
+  if (!activityId) return fail("Activity id is required.");
+
+  const parsed = parseActivityFields(data);
+  if ("error" in parsed) return fail(parsed.error);
+
+  try {
+    const gate = await activityEditGate(activityId, userId);
+    if ("error" in gate) return fail(gate.error);
+
+    const activity = await prisma.activity.update({
+      where: { id: activityId },
+      data: parsed,
+    });
+
+    revalidatePath(`/trips/${gate.tripId}`);
+    return { success: true, data: serializeActivity(activity) };
+  } catch (error) {
+    console.error("updateActivity failed:", error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      // Deleted between the gate check and the update.
+      return fail("Activity not found.");
+    }
+    return fail("Failed to update activity. Please try again.");
+  }
+}
+
+/** Deletes an activity. Requires OWNER or EDITOR membership on its trip. */
+export async function deleteActivity(
+  activityId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to edit this trip.");
+
+  if (!activityId) return fail("Activity id is required.");
+
+  try {
+    const gate = await activityEditGate(activityId, userId);
+    if ("error" in gate) return fail(gate.error);
+
+    await prisma.activity.delete({ where: { id: activityId } });
+
+    revalidatePath(`/trips/${gate.tripId}`);
+    return { success: true, data: { id: activityId } };
+  } catch (error) {
+    console.error("deleteActivity failed:", error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return fail("Activity not found.");
+    }
+    return fail("Failed to delete activity. Please try again.");
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Helpers (module-private: "use server" files may only export          */
 /* async functions and types)                                           */
 /* ------------------------------------------------------------------ */
+
+/** Validates AddActivityInput and normalizes it for Prisma writes. */
+function parseActivityFields(data: AddActivityInput):
+  | {
+      title: string;
+      description: string | null;
+      time: Date | null;
+      locationName: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      cost: number | null;
+    }
+  | { error: string } {
+  const title = data.title?.trim();
+  if (!title) return { error: "Activity title is required." };
+
+  let time: Date | null = null;
+  if (data.time != null) {
+    time = parseDateTime(data.time);
+    if (!time) return { error: "Time must be a valid ISO datetime string." };
+  }
+
+  const hasLatitude = data.latitude != null;
+  const hasLongitude = data.longitude != null;
+  if (hasLatitude !== hasLongitude) {
+    return { error: "Latitude and longitude must be provided together." };
+  }
+  if (hasLatitude && (data.latitude! < -90 || data.latitude! > 90)) {
+    return { error: "Latitude must be between -90 and 90." };
+  }
+  if (hasLongitude && (data.longitude! < -180 || data.longitude! > 180)) {
+    return { error: "Longitude must be between -180 and 180." };
+  }
+
+  if (data.cost != null && (!Number.isFinite(data.cost) || data.cost < 0)) {
+    return { error: "Cost must be a non-negative number." };
+  }
+
+  return {
+    title,
+    description: data.description?.trim() || null,
+    time,
+    locationName: data.locationName?.trim() || null,
+    latitude: data.latitude ?? null,
+    longitude: data.longitude ?? null,
+    cost: data.cost ?? null,
+  };
+}
+
+/**
+ * Resolves an activity to its trip and checks the caller may edit it.
+ * Non-members and missing activities get the same answer: no existence leaks.
+ */
+async function activityEditGate(
+  activityId: string,
+  userId: string,
+): Promise<{ tripId: string } | { error: string }> {
+  const activity = await prisma.activity.findUnique({
+    where: { id: activityId },
+    select: {
+      tripDay: {
+        select: {
+          tripId: true,
+          trip: {
+            select: {
+              members: { where: { userId }, select: { role: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const membership = activity?.tripDay.trip.members[0];
+  if (!activity || !membership) return { error: "Activity not found." };
+  if (membership.role === "VIEWER") {
+    return { error: "You don't have permission to edit this trip." };
+  }
+  return { tripId: activity.tripDay.tripId };
+}
 
 /** Parses the date part of an ISO string as UTC midnight (for @db.Date columns). */
 function parseUtcDate(value: string): Date | null {
