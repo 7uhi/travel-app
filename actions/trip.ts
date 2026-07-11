@@ -19,6 +19,7 @@ import type {
   TripDayWithActivities,
   TripInput,
   TripMemberWithUser,
+  TripSummary,
   TripWithDays,
 } from "@/types";
 
@@ -108,6 +109,41 @@ export async function createTrip(
   } catch (error) {
     console.error("createTrip failed:", error);
     return fail("Failed to create trip. Please try again.");
+  }
+}
+
+/** Lists the signed-in user's trips (via membership), newest start date first. */
+export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to view your trips.");
+
+  try {
+    const memberships = await prisma.tripMember.findMany({
+      where: { userId },
+      include: {
+        trip: {
+          include: { _count: { select: { members: true, days: true } } },
+        },
+      },
+      orderBy: { trip: { startDate: "desc" } },
+    });
+
+    return {
+      success: true,
+      data: memberships.map((m) => ({
+        id: m.trip.id,
+        title: m.trip.title,
+        destination: m.trip.destination,
+        startDate: m.trip.startDate.toISOString(),
+        endDate: m.trip.endDate.toISOString(),
+        role: m.role,
+        memberCount: m.trip._count.members,
+        dayCount: m.trip._count.days,
+      })),
+    };
+  } catch (error) {
+    console.error("getMyTrips failed:", error);
+    return fail("Failed to load your trips. Please try again.");
   }
 }
 
@@ -303,6 +339,7 @@ function serializeTrip(trip: DbTripWithRelations): TripWithDays {
     startDate: trip.startDate.toISOString(),
     endDate: trip.endDate.toISOString(),
     totalBudget: trip.totalBudget?.toNumber() ?? null,
+    currency: trip.currency,
     createdAt: trip.createdAt.toISOString(),
     updatedAt: trip.updatedAt.toISOString(),
     days: trip.days.map(serializeDay),

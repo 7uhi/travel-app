@@ -24,6 +24,10 @@ model User {
   sessions       Session[]
   memberships    TripMember[]
   invitesCreated Invite[]
+  expensesPaid    Expense[]      @relation("ExpensesPaid")
+  expenseSplits   ExpenseSplit[]
+  settlementsFrom Settlement[]   @relation("SettlementsFrom")
+  settlementsTo   Settlement[]   @relation("SettlementsTo")
 }
 
 model Account {
@@ -76,12 +80,16 @@ model Trip {
   startDate   DateTime @db.Date
   endDate     DateTime @db.Date
   totalBudget Decimal? @db.Decimal(12, 2)
+  // Single currency per trip: expense splitting and balances assume it.
+  currency    String   @default("EUR")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members TripMember[]
-  days    TripDay[]
-  invites Invite[]
+  members     TripMember[]
+  days        TripDay[]
+  invites     Invite[]
+  expenses    Expense[]
+  settlements Settlement[]
 }
 
 enum TripRole {
@@ -119,6 +127,74 @@ model Invite {
 
   createdBy String
   creator   User   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+/* ------------------------------------------------------------------ */
+/* Expense splitting — all money stored as integer cents               */
+/* ------------------------------------------------------------------ */
+
+enum ExpenseCategory {
+  FOOD
+  TRANSPORT
+  LODGING
+  ACTIVITY
+  SHOPPING
+  OTHER
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  description String
+  amountCents Int
+  currency    String
+  category    ExpenseCategory @default(OTHER)
+  date        DateTime        @db.Date
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  paidById String
+  paidBy   User   @relation("ExpensesPaid", fields: [paidById], references: [id], onDelete: Cascade)
+
+  splits ExpenseSplit[]
+
+  @@index([tripId])
+  @@index([paidById])
+}
+
+model ExpenseSplit {
+  id          String @id @default(cuid())
+  amountCents Int
+
+  expenseId String
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One share per participant per expense
+  @@unique([expenseId, userId])
+  @@index([userId])
+}
+
+model Settlement {
+  id          String   @id @default(cuid())
+  amountCents Int
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  fromUserId String
+  fromUser   User   @relation("SettlementsFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  toUserId String
+  toUser   User   @relation("SettlementsTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
   @@index([tripId])
 }

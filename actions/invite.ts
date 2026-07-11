@@ -3,7 +3,6 @@
 import { randomBytes } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import { fail, type ActionResult } from "@/lib/action-result";
@@ -108,7 +107,9 @@ export async function acceptInvite(
       data: { userId, tripId: invite.tripId, role: invite.role },
     });
 
-    revalidatePath(`/trips/${invite.tripId}`);
+    // No revalidatePath here: this action runs during the /invite/[token]
+    // page render (a GET), where revalidation is unsupported and throws.
+    // The caller redirects to /trips/[id], which is dynamic and re-fetches.
     return {
       success: true,
       data: { tripId: invite.tripId, alreadyMember: false },

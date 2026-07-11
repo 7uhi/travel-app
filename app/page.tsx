@@ -27,6 +27,12 @@ export default async function Home() {
               {session.user.name ?? session.user.email}
             </span>
           </p>
+          <Link
+            href="/trips"
+            className="rounded-full bg-pine px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-pine-dark"
+          >
+            Your trips
+          </Link>
           <form
             action={async () => {
               "use server";
