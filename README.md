@@ -1,7 +1,8 @@
 # Roam
 
 A collaborative trip-planning app: shared trips with day-by-day itineraries,
-invite links, and Splitwise-style group expense splitting.
+availability polls to pick trip dates together, invite links, and
+Splitwise-style group expense splitting.
 
 Built with Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4,
 Prisma 6 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
@@ -40,7 +41,7 @@ Prisma 6 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
    npx prisma migrate deploy
    ```
 
-4. **Run it**:
+4. **Run it** (`npm test` runs the unit tests):
 
    ```sh
    npm run dev
@@ -79,8 +80,13 @@ components/                                UI (server + client components)
 ### Domain model
 
 - **Trip → TripDay → Activity.** One `TripDay` per calendar day is
-  pre-generated when a trip is created. Activities hold title, time,
-  location, and optional cost.
+  pre-generated when a trip is created with fixed dates. Activities hold
+  title, time, location, and optional cost.
+- **Availability poll.** A trip can instead be created with a candidate
+  window + desired length; members mark free days (`AvailabilityDay`, one row
+  per member-day) on a heatmap calendar, and the owner confirms dates from
+  ranked suggestions (`lib/availability.ts`) — which generates the `TripDay`
+  rows and unlocks the itinerary.
 - **Membership & roles.** `TripMember` links users to trips with a role:
   `OWNER`, `EDITOR`, or `VIEWER`. Viewers are read-only. `Invite` tokens are
   multi-use, expire after 7 days, and grant `EDITOR` or `VIEWER` — never

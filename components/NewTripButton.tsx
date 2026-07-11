@@ -9,6 +9,7 @@ import { createTrip } from "@/actions/trip";
 /** "New trip" button that opens a create-trip dialog and routes to the new dashboard. */
 export function NewTripButton() {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"dates" | "poll">("dates");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -22,13 +23,25 @@ export function NewTripButton() {
   function submit(formData: FormData) {
     startTransition(async () => {
       const budgetRaw = String(formData.get("totalBudget") ?? "").trim();
-      const result = await createTrip({
+      const base = {
         title: String(formData.get("title") ?? ""),
         destination: String(formData.get("destination") ?? ""),
-        startDate: String(formData.get("startDate") ?? ""),
-        endDate: String(formData.get("endDate") ?? ""),
         totalBudget: budgetRaw === "" ? null : Number(budgetRaw),
-      });
+      };
+      const result = await createTrip(
+        mode === "dates"
+          ? {
+              ...base,
+              startDate: String(formData.get("startDate") ?? ""),
+              endDate: String(formData.get("endDate") ?? ""),
+            }
+          : {
+              ...base,
+              windowStart: String(formData.get("windowStart") ?? ""),
+              windowEnd: String(formData.get("windowEnd") ?? ""),
+              durationDays: Number(formData.get("durationDays") ?? ""),
+            },
+      );
 
       if (!result.success) {
         setError(result.error);
@@ -90,24 +103,81 @@ export function NewTripButton() {
                   className={inputClass}
                 />
               </Field>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Start date">
-                  <input
-                    name="startDate"
-                    type="date"
-                    required
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="End date">
-                  <input
-                    name="endDate"
-                    type="date"
-                    required
-                    className={inputClass}
-                  />
-                </Field>
+              <div
+                role="radiogroup"
+                aria-label="How will you pick dates?"
+                className="grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1"
+              >
+                <ModeButton
+                  active={mode === "dates"}
+                  onClick={() => setMode("dates")}
+                >
+                  Dates are set
+                </ModeButton>
+                <ModeButton
+                  active={mode === "poll"}
+                  onClick={() => setMode("poll")}
+                >
+                  Poll the group
+                </ModeButton>
               </div>
+
+              {mode === "dates" ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Start date">
+                    <input
+                      name="startDate"
+                      type="date"
+                      required
+                      className={inputClass}
+                    />
+                  </Field>
+                  <Field label="End date">
+                    <input
+                      name="endDate"
+                      type="date"
+                      required
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Window opens">
+                      <input
+                        name="windowStart"
+                        type="date"
+                        required
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Window closes">
+                      <input
+                        name="windowEnd"
+                        type="date"
+                        required
+                        className={inputClass}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Trip length (days)">
+                    <input
+                      name="durationDays"
+                      type="number"
+                      min="1"
+                      step="1"
+                      required
+                      placeholder="7"
+                      className={inputClass}
+                    />
+                  </Field>
+                  <p className="text-xs leading-relaxed text-stone-500">
+                    Members mark the days they're free inside the window; you
+                    confirm the trip dates from the overlap.
+                  </p>
+                </>
+              )}
               <Field label="Total budget (optional)">
                 <input
                   name="totalBudget"
@@ -151,6 +221,30 @@ export function NewTripButton() {
 
 const inputClass =
   "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine";
+
+function ModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+        active ? "bg-white text-ink shadow-sm" : "text-stone-500 hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 function Field({
   label,

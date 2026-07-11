@@ -11,6 +11,12 @@ import type {
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
+import {
+  dayDatesBetween,
+  inclusiveDayCount,
+  MAX_TRIP_DAYS,
+  parseUtcDate,
+} from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 import { currentUserId } from "@/lib/session";
 import type {
@@ -28,8 +34,8 @@ export type { ActionResult };
 /** `tripDayId` comes from the first argument of addActivityToDay. */
 export type AddActivityInput = Omit<ActivityInput, "tripDayId">;
 
-/** Safety cap so a bad date range can't create thousands of TripDay rows. */
-const MAX_TRIP_DAYS = 366;
+/** Availability-poll windows are capped to keep the calendar UI manageable. */
+const MAX_WINDOW_DAYS = 180;
 
 const TRIP_INCLUDE = {
   days: {
@@ -48,8 +54,10 @@ const TRIP_INCLUDE = {
 /* ------------------------------------------------------------------ */
 
 /**
- * Creates a trip owned by the signed-in user (as an OWNER TripMember) and
- * pre-generates one TripDay per calendar day in [startDate, endDate].
+ * Creates a trip owned by the signed-in user (as an OWNER TripMember), in one
+ * of two modes: with fixed dates (pre-generates one TripDay per calendar day)
+ * or with an availability-poll window (no days until the owner confirms dates
+ * via setTripDates).
  */
 export async function createTrip(
   data: TripInput,
@@ -62,15 +70,6 @@ export async function createTrip(
   if (!title) return fail("Title is required.");
   if (!destination) return fail("Destination is required.");
 
-  const startDate = parseUtcDate(data.startDate);
-  const endDate = parseUtcDate(data.endDate);
-  if (!startDate || !endDate) {
-    return fail("Start and end dates must be valid ISO dates (YYYY-MM-DD).");
-  }
-  if (endDate < startDate) {
-    return fail("End date must be on or after the start date.");
-  }
-
   if (
     data.totalBudget != null &&
     (!Number.isFinite(data.totalBudget) || data.totalBudget < 0)
@@ -78,28 +77,66 @@ export async function createTrip(
     return fail("Total budget must be a non-negative number.");
   }
 
-  const dayDates: Date[] = [];
-  for (
-    let d = new Date(startDate);
-    d <= endDate;
-    d.setUTCDate(d.getUTCDate() + 1)
-  ) {
-    dayDates.push(new Date(d));
+  const hasDates = Boolean(data.startDate?.trim() || data.endDate?.trim());
+  const hasWindow = Boolean(
+    data.windowStart?.trim() || data.windowEnd?.trim() || data.durationDays != null,
+  );
+  if (hasDates && hasWindow) {
+    return fail("Set either trip dates or an availability window, not both.");
   }
-  if (dayDates.length > MAX_TRIP_DAYS) {
-    return fail(`Trips are limited to ${MAX_TRIP_DAYS} days.`);
+
+  let tripDates: Prisma.TripCreateInput;
+  if (hasDates) {
+    const startDate = parseUtcDate(data.startDate ?? "");
+    const endDate = parseUtcDate(data.endDate ?? "");
+    if (!startDate || !endDate) {
+      return fail("Start and end dates must be valid ISO dates (YYYY-MM-DD).");
+    }
+    if (endDate < startDate) {
+      return fail("End date must be on or after the start date.");
+    }
+    const dayDates = dayDatesBetween(startDate, endDate);
+    if (dayDates.length > MAX_TRIP_DAYS) {
+      return fail(`Trips are limited to ${MAX_TRIP_DAYS} days.`);
+    }
+    tripDates = {
+      title,
+      destination,
+      startDate,
+      endDate,
+      days: { create: dayDates.map((date) => ({ date })) },
+    };
+  } else if (hasWindow) {
+    const windowStart = parseUtcDate(data.windowStart ?? "");
+    const windowEnd = parseUtcDate(data.windowEnd ?? "");
+    if (!windowStart || !windowEnd) {
+      return fail("Window dates must be valid ISO dates (YYYY-MM-DD).");
+    }
+    if (windowEnd < windowStart) {
+      return fail("The window must end on or after it starts.");
+    }
+    const windowLen = inclusiveDayCount(windowStart, windowEnd);
+    if (windowLen > MAX_WINDOW_DAYS) {
+      return fail(`Availability windows are limited to ${MAX_WINDOW_DAYS} days.`);
+    }
+    const durationDays = data.durationDays;
+    if (!Number.isInteger(durationDays) || durationDays! < 1) {
+      return fail("Trip length must be a whole number of days, at least 1.");
+    }
+    if (durationDays! > windowLen) {
+      return fail("Trip length can't be longer than the availability window.");
+    }
+    tripDates = { title, destination, windowStart, windowEnd, durationDays };
+  } else {
+    return fail("Choose trip dates or set an availability window.");
   }
 
   try {
     const trip = await prisma.trip.create({
       data: {
-        title,
-        destination,
-        startDate,
-        endDate,
+        ...tripDates,
         totalBudget: data.totalBudget,
         members: { create: { userId, role: "OWNER" } },
-        days: { create: dayDates.map((date) => ({ date })) },
       },
       include: TRIP_INCLUDE,
     });
@@ -112,7 +149,10 @@ export async function createTrip(
   }
 }
 
-/** Lists the signed-in user's trips (via membership), newest start date first. */
+/**
+ * Lists the signed-in user's trips (via membership): trips still picking
+ * dates first (they need attention), then newest start date first.
+ */
 export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to view your trips.");
@@ -125,7 +165,7 @@ export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
           include: { _count: { select: { members: true, days: true } } },
         },
       },
-      orderBy: { trip: { startDate: "desc" } },
+      orderBy: { trip: { startDate: { sort: "desc", nulls: "first" } } },
     });
 
     return {
@@ -134,8 +174,8 @@ export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
         id: m.trip.id,
         title: m.trip.title,
         destination: m.trip.destination,
-        startDate: m.trip.startDate.toISOString(),
-        endDate: m.trip.endDate.toISOString(),
+        startDate: m.trip.startDate?.toISOString() ?? null,
+        endDate: m.trip.endDate?.toISOString() ?? null,
         role: m.role,
         memberCount: m.trip._count.members,
         dayCount: m.trip._count.days,
@@ -384,13 +424,6 @@ async function activityEditGate(
   return { tripId: activity.tripDay.tripId };
 }
 
-/** Parses the date part of an ISO string as UTC midnight (for @db.Date columns). */
-function parseUtcDate(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
-  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function parseDateTime(value: string): Date | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
@@ -455,8 +488,11 @@ function serializeTrip(trip: DbTripWithRelations): TripWithDays {
     id: trip.id,
     title: trip.title,
     destination: trip.destination,
-    startDate: trip.startDate.toISOString(),
-    endDate: trip.endDate.toISOString(),
+    startDate: trip.startDate?.toISOString() ?? null,
+    endDate: trip.endDate?.toISOString() ?? null,
+    windowStart: trip.windowStart?.toISOString() ?? null,
+    windowEnd: trip.windowEnd?.toISOString() ?? null,
+    durationDays: trip.durationDays,
     totalBudget: trip.totalBudget?.toNumber() ?? null,
     currency: trip.currency,
     createdAt: trip.createdAt.toISOString(),

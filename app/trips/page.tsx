@@ -8,12 +8,14 @@ import { tripStatus, type TripStatus } from "@/lib/trip-status";
 import type { TripSummary } from "@/types";
 
 const COVER_GRADIENTS: Record<TripStatus, string> = {
+  planning: "bg-[linear-gradient(135deg,#9b8ec4_0%,#6b5b8e_55%,#3d2f52_100%)]",
   upcoming: "bg-[linear-gradient(135deg,#e29a5b_0%,#c06b5e_55%,#54314e_100%)]",
   ongoing: "bg-[linear-gradient(135deg,#7fb069_0%,#3d7a5c_55%,#0a4433_100%)]",
   past: "bg-[linear-gradient(135deg,#a8b8c8_0%,#7d94ab_55%,#4a5d73_100%)]",
 };
 
 const STATUS_LABELS: Record<TripStatus, string> = {
+  planning: "Picking dates",
   upcoming: "Upcoming",
   ongoing: "Happening now",
   past: "Past",
@@ -82,7 +84,9 @@ function TripCard({ trip }: { trip: TripSummary }) {
             </p>
             <p className="flex items-center gap-1.5">
               <CalendarDays size={12} className="shrink-0 text-stone-400" />
-              {formatDateRange(trip.startDate, trip.endDate)}
+              {trip.startDate && trip.endDate
+                ? formatDateRange(trip.startDate, trip.endDate)
+                : "Dates TBD"}
             </p>
           </div>
           <div className="mt-3 flex items-center justify-between text-xs">

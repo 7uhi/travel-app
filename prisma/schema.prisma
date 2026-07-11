@@ -28,6 +28,7 @@ model User {
   expenseSplits   ExpenseSplit[]
   settlementsFrom Settlement[]   @relation("SettlementsFrom")
   settlementsTo   Settlement[]   @relation("SettlementsTo")
+  availability    AvailabilityDay[]
 }
 
 model Account {
@@ -74,22 +75,29 @@ model VerificationToken {
 /* ------------------------------------------------------------------ */
 
 model Trip {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   destination String
-  startDate   DateTime @db.Date
-  endDate     DateTime @db.Date
+  // Null while the group is still picking dates via the availability poll.
+  startDate   DateTime? @db.Date
+  endDate     DateTime? @db.Date
+  // Availability-poll candidate window and desired trip length; set when the
+  // trip is created without fixed dates.
+  windowStart  DateTime? @db.Date
+  windowEnd    DateTime? @db.Date
+  durationDays Int?
   totalBudget Decimal? @db.Decimal(12, 2)
   // Single currency per trip: expense splitting and balances assume it.
   currency    String   @default("EUR")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members     TripMember[]
-  days        TripDay[]
-  invites     Invite[]
-  expenses    Expense[]
-  settlements Settlement[]
+  members      TripMember[]
+  days         TripDay[]
+  invites      Invite[]
+  expenses     Expense[]
+  settlements  Settlement[]
+  availability AvailabilityDay[]
 }
 
 enum TripRole {
@@ -196,6 +204,22 @@ model Settlement {
   toUserId String
   toUser   User   @relation("SettlementsTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
+  @@index([tripId])
+}
+
+// One row per (member, day) the member is available; absence = unavailable.
+model AvailabilityDay {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId, date])
   @@index([tripId])
 }
 
