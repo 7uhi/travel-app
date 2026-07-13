@@ -39,10 +39,15 @@ export interface Trip {
   id: string;
   title: string;
   destination: string;
-  /** ISO date string, e.g. "2026-08-01T00:00:00.000Z" */
-  startDate: string;
-  /** ISO date string */
-  endDate: string;
+  /** ISO date string, e.g. "2026-08-01T00:00:00.000Z"; null while the group is still picking dates */
+  startDate: string | null;
+  /** ISO date string; null while the group is still picking dates */
+  endDate: string | null;
+  /** Availability-poll candidate window (ISO date); null when dates were fixed at creation */
+  windowStart: string | null;
+  windowEnd: string | null;
+  /** Desired trip length in days for the availability poll */
+  durationDays: number | null;
   totalBudget: number | null;
   /** ISO 4217 code; all expenses on the trip use this currency. */
   currency: string;
@@ -101,10 +106,10 @@ export interface TripSummary {
   id: string;
   title: string;
   destination: string;
-  /** ISO date string */
-  startDate: string;
-  /** ISO date string */
-  endDate: string;
+  /** ISO date string; null while the group is still picking dates */
+  startDate: string | null;
+  /** ISO date string; null while the group is still picking dates */
+  endDate: string | null;
   /** The requesting user's role on this trip. */
   role: TripRole;
   memberCount: number;
@@ -115,6 +120,38 @@ export interface TripSummary {
 export interface TripWithDays extends Trip {
   days: TripDayWithActivities[];
   members: TripMemberWithUser[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Availability poll — collaborative date-picking                       */
+/* ------------------------------------------------------------------ */
+
+/** One member-day a member has marked themselves available. */
+export interface AvailabilityEntry {
+  userId: string;
+  /** ISO date string at UTC midnight */
+  date: string;
+}
+
+/** A candidate set of trip dates ranked by member overlap. */
+export interface SuggestedWindow {
+  /** ISO date string */
+  startDate: string;
+  /** ISO date string, inclusive */
+  endDate: string;
+  /** Members available on every day of the window */
+  availableUserIds: string[];
+  unavailableUserIds: string[];
+}
+
+/** Returned by getTripAvailability. */
+export interface TripAvailability {
+  windowStart: string | null;
+  windowEnd: string | null;
+  durationDays: number | null;
+  /** Every member's marked-available days. */
+  entries: AvailabilityEntry[];
+  suggestions: SuggestedWindow[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -199,13 +236,24 @@ export interface TripBalances {
 /* omit fields instead of passing explicit nulls.                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Exactly one of the two modes must be provided: fixed dates
+ * (startDate + endDate) or an availability poll (windowStart + windowEnd +
+ * durationDays).
+ */
 export interface TripInput {
   title: string;
   destination: string;
   /** ISO date string (YYYY-MM-DD or full ISO) */
-  startDate: string;
+  startDate?: string;
   /** ISO date string */
-  endDate: string;
+  endDate?: string;
+  /** ISO date string — first day members can mark availability on */
+  windowStart?: string;
+  /** ISO date string — last day of the poll window */
+  windowEnd?: string;
+  /** Desired trip length in days */
+  durationDays?: number;
   totalBudget?: number | null;
 }
 

@@ -3,6 +3,7 @@ import { CalendarDays, MapPin, Sun } from "lucide-react";
 
 import { ShareTripButton } from "@/components/ShareTripButton";
 import { formatCurrency, formatDateRange, formatDayDate } from "@/lib/format";
+import { tripStatus } from "@/lib/trip-status";
 import type { TripRole, TripWithDays } from "@/types";
 
 const MS_PER_DAY = 86_400_000;
@@ -18,11 +19,14 @@ export function TripHeader({
   currentUserRole = null,
   activeTab = "itinerary",
   showTabs = true,
+  respondedCount = null,
 }: {
   trip: TripWithDays;
   currentUserRole?: TripRole | null;
   activeTab?: TripTab;
   showTabs?: boolean;
+  /** Members who marked availability; only shown while the trip is unscheduled. */
+  respondedCount?: number | null;
 }) {
   const activities = trip.days.flatMap((day) => day.activities);
   const plannedCost = activities.reduce((sum, a) => sum + (a.cost ?? 0), 0);
@@ -33,21 +37,24 @@ export function TripHeader({
       ? Math.round((daysWithPlans / trip.days.length) * 100)
       : 0;
 
+  const status = tripStatus(trip.startDate, trip.endDate);
+  const scheduled = status !== "planning";
   const now = Date.now();
-  const start = Date.parse(trip.startDate);
-  const endExclusive = Date.parse(trip.endDate) + MS_PER_DAY; // endDate is inclusive
-  const daysToGo = Math.max(0, Math.ceil((start - now) / MS_PER_DAY));
-  const status =
-    now < start ? "upcoming" : now < endExclusive ? "ongoing" : "past";
+  const start = scheduled ? Date.parse(trip.startDate!) : Number.NaN;
+  const daysToGo = scheduled
+    ? Math.max(0, Math.ceil((start - now) / MS_PER_DAY))
+    : 0;
   const currentDayNumber =
     status === "ongoing" ? Math.floor((now - start) / MS_PER_DAY) + 1 : null;
 
   const statusChip =
-    status === "upcoming"
-      ? `Upcoming · in ${daysToGo} ${daysToGo === 1 ? "day" : "days"}`
-      : status === "ongoing"
-        ? `Happening now · day ${currentDayNumber} of ${trip.days.length}`
-        : "Past trip";
+    status === "planning"
+      ? "Planning · picking dates"
+      : status === "upcoming"
+        ? `Upcoming · in ${daysToGo} ${daysToGo === 1 ? "day" : "days"}`
+        : status === "ongoing"
+          ? `Happening now · day ${currentDayNumber} of ${trip.days.length}`
+          : "Past trip";
 
   const budgetPct =
     trip.totalBudget && trip.totalBudget > 0
@@ -94,25 +101,41 @@ export function TripHeader({
               </span>
               <span className="flex items-center gap-1.5">
                 <CalendarDays size={15} className="text-white/70" />
-                {formatDateRange(trip.startDate, trip.endDate)}
+                {scheduled
+                  ? formatDateRange(trip.startDate!, trip.endDate!)
+                  : trip.windowStart && trip.windowEnd
+                    ? `Sometime ${formatDateRange(trip.windowStart, trip.windowEnd)}`
+                    : "Dates TBD"}
               </span>
               <span className="flex items-center gap-1.5">
                 <Sun size={15} className="text-white/70" />
-                {trip.days.length} {trip.days.length === 1 ? "day" : "days"}
+                {scheduled
+                  ? `${trip.days.length} ${trip.days.length === 1 ? "day" : "days"}`
+                  : `~${trip.durationDays ?? "?"} days`}
               </span>
             </div>
           </div>
 
           <div className="w-full max-w-[220px]">
-            <p className="mb-2 text-right text-xs font-medium text-white/85">
-              Trip {plannedPct}% planned
-            </p>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/25">
-              <div
-                className="h-full rounded-full bg-white"
-                style={{ width: `${plannedPct}%` }}
-              />
-            </div>
+            {scheduled ? (
+              <>
+                <p className="mb-2 text-right text-xs font-medium text-white/85">
+                  Trip {plannedPct}% planned
+                </p>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/25">
+                  <div
+                    className="h-full rounded-full bg-white"
+                    style={{ width: `${plannedPct}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              respondedCount !== null && (
+                <p className="text-right text-xs font-medium text-white/85">
+                  {respondedCount} of {trip.members.length} marked availability
+                </p>
+              )
+            )}
           </div>
         </div>
       </section>
@@ -120,7 +143,14 @@ export function TripHeader({
       {/* Stat cards */}
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Countdown">
-          {status === "upcoming" ? (
+          {status === "planning" ? (
+            <>
+              <p className="font-display text-4xl">TBD</p>
+              <p className="mt-2 text-sm text-stone-500">
+                Dates get picked from everyone's availability
+              </p>
+            </>
+          ) : status === "upcoming" ? (
             <>
               <p className="font-display text-4xl">
                 {daysToGo}
@@ -129,7 +159,7 @@ export function TripHeader({
                 </span>
               </p>
               <p className="mt-2 text-sm text-stone-500">
-                Departs {formatDayDate(trip.startDate)}
+                Departs {formatDayDate(trip.startDate!)}
               </p>
             </>
           ) : status === "ongoing" ? (
@@ -148,7 +178,7 @@ export function TripHeader({
                 </span>
               </p>
               <p className="mt-2 text-sm text-stone-500">
-                Ended {formatDayDate(trip.endDate)}
+                Ended {formatDayDate(trip.endDate!)}
               </p>
             </>
           )}
@@ -194,9 +224,11 @@ export function TripHeader({
             </span>
           </p>
           <p className="mt-2 text-sm text-stone-500">
-            {openDays > 0
-              ? `${openDays} ${openDays === 1 ? "day" : "days"} still open`
-              : "Every day has plans"}
+            {status === "planning"
+              ? "Unlocks once trip dates are set"
+              : openDays > 0
+                ? `${openDays} ${openDays === 1 ? "day" : "days"} still open`
+                : "Every day has plans"}
           </p>
         </StatCard>
       </section>
