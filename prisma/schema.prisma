@@ -29,6 +29,7 @@ model User {
   settlementsFrom Settlement[]   @relation("SettlementsFrom")
   settlementsTo   Settlement[]   @relation("SettlementsTo")
   availability    AvailabilityDay[]
+  packingItems    PackingItem[]
 }
 
 model Account {
@@ -98,6 +99,7 @@ model Trip {
   expenses     Expense[]
   settlements  Settlement[]
   availability AvailabilityDay[]
+  packingItems PackingItem[]
 }
 
 enum TripRole {
@@ -255,4 +257,37 @@ model Activity {
   tripDay   TripDay @relation(fields: [tripDayId], references: [id], onDelete: Cascade)
 
   @@index([tripDayId])
+}
+
+/* ------------------------------------------------------------------ */
+/* Packing list — one shared checklist per trip                        */
+/* ------------------------------------------------------------------ */
+
+enum PackingCategory {
+  GEAR
+  CLOTHING
+  TOILETRIES
+  ELECTRONICS
+  DOCUMENTS
+  FOOD
+  OTHER
+}
+
+model PackingItem {
+  id        String          @id @default(cuid())
+  name      String
+  category  PackingCategory @default(OTHER)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  // Optional member bringing the item; SetNull so a shared item survives if
+  // the assigned member is later removed from the trip.
+  assigneeId String?
+  assignee   User?   @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+  @@index([assigneeId])
 }

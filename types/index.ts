@@ -274,3 +274,35 @@ export interface ActivityInput {
   cost?: number | null;
   tripDayId: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Packing list — one shared checklist per trip                         */
+/* ------------------------------------------------------------------ */
+
+export type PackingCategory =
+  | "GEAR"
+  | "CLOTHING"
+  | "TOILETRIES"
+  | "ELECTRONICS"
+  | "DOCUMENTS"
+  | "FOOD"
+  | "OTHER";
+
+/** A packing item with its (optional) assigned member, after serialization. */
+export interface PackingItemWithAssignee {
+  id: string;
+  tripId: string;
+  name: string;
+  category: PackingCategory;
+  /** ISO datetime string */
+  createdAt: string;
+  assigneeId: string | null;
+  assignee: { id: string; name: string | null; image: string | null } | null;
+}
+
+export interface PackingItemInput {
+  name: string;
+  category: PackingCategory;
+  /** Trip member bringing the item; omit or null for unclaimed. */
+  assigneeId?: string | null;
+}
