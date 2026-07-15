@@ -150,8 +150,9 @@ export async function addPackingItem(
   }
 }
 
-/** Checks an item on or off the checklist. Shared items require OWNER or
- * EDITOR; personal items may only be toggled by their owner. */
+/** Checks an item on or off the checklist. Shared items may only be toggled
+ * by their assignee (unassigned items by nobody — assign someone first);
+ * personal items only by their owner. */
 export async function togglePackingItem(
   itemId: string,
   packed: boolean,
@@ -161,7 +162,7 @@ export async function togglePackingItem(
   if (!itemId) return fail("Item id is required.");
 
   try {
-    const gate = await packingEditGate(itemId, userId);
+    const gate = await packingToggleGate(itemId, userId);
     if ("error" in gate) return fail(gate.error);
 
     const item = await prisma.packingItem.update({
@@ -319,6 +320,39 @@ async function packingEditGate(
     return { error: "You don't have permission to edit this trip." };
   }
   return { tripId: item.tripId, ownerId: item.ownerId };
+}
+
+/**
+ * Check-off is stricter than editing: a shared item may only be toggled by
+ * the member assigned to bring it — role doesn't matter, and unassigned items
+ * can't be checked by anyone. Personal items only by their owner.
+ */
+async function packingToggleGate(
+  itemId: string,
+  userId: string,
+): Promise<{ tripId: string } | { error: string }> {
+  const item = await prisma.packingItem.findUnique({
+    where: { id: itemId },
+    select: {
+      tripId: true,
+      ownerId: true,
+      assigneeId: true,
+      trip: {
+        select: { members: { where: { userId }, select: { role: true } } },
+      },
+    },
+  });
+
+  const membership = item?.trip.members[0];
+  if (!item || !membership) return { error: "Packing item not found." };
+  if (item.ownerId) {
+    if (item.ownerId !== userId) return { error: "Packing item not found." };
+  } else if (!item.assigneeId) {
+    return { error: "Assign this item to a member before checking it off." };
+  } else if (item.assigneeId !== userId) {
+    return { error: "Only the member bringing this item can check it off." };
+  }
+  return { tripId: item.tripId };
 }
 
 /**

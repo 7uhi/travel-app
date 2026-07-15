@@ -20,21 +20,23 @@ interface Member {
 
 /**
  * A packing checklist grouped by category. The shared variant shows who's
- * bringing each item; OWNER/EDITOR members can check items off, reassign, and
- * delete, while VIEWERs see a read-only list. The personal variant is the
- * signed-in member's private list, so everything is editable and there's no
- * assignee.
+ * bringing each item; OWNER/EDITOR members can reassign and delete, but an
+ * item's checkbox belongs to its assignee alone — unassigned items can't be
+ * checked by anyone. The personal variant is the signed-in member's private
+ * list, so everything is editable and there's no assignee.
  */
 export function PackingList({
   items,
   members,
   canEdit,
   variant,
+  currentUserId,
 }: {
   items: PackingItemWithAssignee[];
   members: Member[];
   canEdit: boolean;
   variant: "shared" | "personal";
+  currentUserId: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -70,12 +72,24 @@ export function PackingList({
                 {group.label}
               </h3>
               <ul className="divide-y divide-stone-100">
-                {group.items.map((item) => (
+                {group.items.map((item) => {
+                  const canToggle =
+                    variant === "personal"
+                      ? canEdit
+                      : item.assigneeId !== null &&
+                        item.assigneeId === currentUserId;
+                  const toggleHint = canToggle
+                    ? undefined
+                    : item.assigneeId
+                      ? `Only ${item.assignee?.name ?? "the assigned member"} can check this off`
+                      : "Assign this item to a member before checking it off";
+                  return (
                   <li key={item.id} className="flex items-center gap-3 py-2">
                     <input
                       type="checkbox"
                       checked={item.packed}
-                      disabled={!canEdit || pending}
+                      disabled={!canToggle || pending}
+                      title={toggleHint}
                       onChange={(e) =>
                         run(() => togglePackingItem(item.id, e.target.checked))
                       }
@@ -131,7 +145,8 @@ export function PackingList({
                       </button>
                     )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           ))}

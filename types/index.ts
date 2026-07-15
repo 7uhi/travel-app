@@ -313,3 +313,32 @@ export interface PackingItemInput {
   /** True to add to the caller's private personal list instead of the shared one. */
   personal?: boolean;
 }
+
+/** One entry of a packing template (no id — templates are import sources). */
+export interface PackingTemplateItem {
+  name: string;
+  category: PackingCategory;
+}
+
+/**
+ * A packing template a member can import into their personal checklist.
+ * Built-in templates ship in code and have `"builtin:<key>"` ids; custom
+ * ones are created per trip by OWNER/EDITOR members and have cuid ids.
+ */
+export interface PackingTemplateSummary {
+  id: string;
+  name: string;
+  builtin: boolean;
+  items: PackingTemplateItem[];
+}
+
+export interface PackingTemplateInput {
+  name: string;
+  items: PackingTemplateItem[];
+}
+
+/** Returned by importPackingTemplate: items copied vs. already present. */
+export interface TemplateImportResult {
+  imported: number;
+  skipped: number;
+}

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getPackingItems, getPersonalPackingItems } from "@/actions/packing";
+import { getPackingTemplates } from "@/actions/packing-templates";
 import { getTripById } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
@@ -13,10 +14,11 @@ export default async function TripPackingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, sharedRes, personalRes] = await Promise.all([
+  const [tripRes, sharedRes, personalRes, templatesRes] = await Promise.all([
     getTripById(id),
     getPackingItems(id),
     getPersonalPackingItems(id),
+    getPackingTemplates(id),
   ]);
 
   if (!tripRes.success) {
@@ -25,6 +27,7 @@ export default async function TripPackingPage({
   }
   if (!sharedRes.success) return <LoadError message={sharedRes.error} />;
   if (!personalRes.success) return <LoadError message={personalRes.error} />;
+  if (!templatesRes.success) return <LoadError message={templatesRes.error} />;
 
   const trip = tripRes.data;
   const session = await auth();
@@ -48,8 +51,10 @@ export default async function TripPackingPage({
           tripId={trip.id}
           personalItems={personalRes.data}
           sharedItems={sharedRes.data}
+          templates={templatesRes.data}
           members={members}
           canEditShared={canEdit}
+          currentUserId={currentUserId}
         />
       </section>
     </main>
