@@ -37,6 +37,9 @@ export function TemplateList({
   const [pending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<PackingTemplateSummary | null>(null);
+  // Built-in template being copied: opens the create dialog pre-filled so the
+  // user can tweak before anything is saved.
+  const [copying, setCopying] = useState<PackingTemplateSummary | null>(null);
   const router = useRouter();
 
   function importTemplate(template: PackingTemplateSummary) {
@@ -51,18 +54,10 @@ export function TemplateList({
     });
   }
 
-  function copyToCustom(template: PackingTemplateSummary) {
-    startTransition(async () => {
-      const result = await createPackingTemplate(tripId, {
-        name: `${template.name} (Copy)`,
-        items: template.items,
-      });
-      if (!result.success) {
-        window.alert(result.error);
-        return;
-      }
-      router.refresh();
-    });
+  async function saveCopy(input: PackingTemplateInput) {
+    const result = await createPackingTemplate(tripId, input);
+    if (result.success) router.refresh();
+    return result;
   }
 
   function remove(template: PackingTemplateSummary) {
@@ -171,7 +166,7 @@ export function TemplateList({
                 {template.builtin && canEdit && (
                   <button
                     type="button"
-                    onClick={() => copyToCustom(template)}
+                    onClick={() => setCopying(template)}
                     disabled={pending}
                     className="flex items-center justify-center gap-2 rounded-full border border-stone-200 px-4 py-2 text-sm font-medium text-stone-500 transition-colors hover:border-stone-300 hover:text-ink disabled:opacity-60"
                   >
@@ -194,6 +189,18 @@ export function TemplateList({
           initialItems={editing.items}
           onSubmit={saveEdit}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {copying && (
+        <TemplateDialog
+          title="New template"
+          submitLabel="Create template"
+          pendingLabel="Creating…"
+          initialName={`${copying.name} (Copy)`}
+          initialItems={copying.items}
+          onSubmit={saveCopy}
+          onClose={() => setCopying(null)}
         />
       )}
     </>
