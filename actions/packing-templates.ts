@@ -87,35 +87,15 @@ export async function createPackingTemplate(
   if (!userId) return fail("You must be signed in to edit this trip.");
   if (!tripId) return fail("Trip id is required.");
 
-  const name = data.name?.trim();
-  if (!name) return fail("Template name is required.");
-  if (name.length > MAX_NAME_LENGTH) {
-    return fail(`Template name must be ${MAX_NAME_LENGTH} characters or fewer.`);
-  }
-  const items = (data.items ?? [])
-    .map((i) => ({ name: i.name?.trim() ?? "", category: i.category }))
-    .filter((i) => i.name.length > 0);
-  if (items.length === 0) {
-    return fail("A template needs at least one item.");
-  }
-  if (items.length > MAX_TEMPLATE_ITEMS) {
-    return fail(`A template can hold at most ${MAX_TEMPLATE_ITEMS} items.`);
-  }
-  for (const item of items) {
-    if (item.name.length > MAX_NAME_LENGTH) {
-      return fail(`Item names must be ${MAX_NAME_LENGTH} characters or fewer.`);
-    }
-    if (!CATEGORIES.includes(item.category)) {
-      return fail("Invalid packing category.");
-    }
-  }
+  const input = validateTemplateInput(data);
+  if ("error" in input) return fail(input.error);
 
   try {
     const gate = await tripEditGate(tripId, userId);
     if ("error" in gate) return fail(gate.error);
 
     const template = await prisma.packingTemplate.create({
-      data: { tripId, name, items: { create: items } },
+      data: { tripId, name: input.name, items: { create: input.items } },
       include: { items: { select: { name: true, category: true } } },
     });
 
@@ -132,6 +112,67 @@ export async function createPackingTemplate(
   } catch (error) {
     console.error("createPackingTemplate failed:", error);
     return fail("Failed to create the template. Please try again.");
+  }
+}
+
+/**
+ * Replaces a custom template's name and items. Requires OWNER or EDITOR
+ * membership; built-in templates can't be edited (copy them to a custom
+ * template instead).
+ */
+export async function updatePackingTemplate(
+  templateId: string,
+  data: PackingTemplateInput,
+): Promise<ActionResult<PackingTemplateSummary>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to edit this trip.");
+  if (!templateId) return fail("Template id is required.");
+  if (isBuiltinTemplateId(templateId)) {
+    return fail("Built-in templates can't be edited.");
+  }
+
+  const input = validateTemplateInput(data);
+  if ("error" in input) return fail(input.error);
+
+  try {
+    const existing = await prisma.packingTemplate.findUnique({
+      where: { id: templateId },
+      select: {
+        tripId: true,
+        trip: {
+          select: { members: { where: { userId }, select: { role: true } } },
+        },
+      },
+    });
+    const membership = existing?.trip.members[0];
+    if (!existing || !membership) return fail("Template not found.");
+    if (membership.role === "VIEWER") {
+      return fail("You don't have permission to edit this trip.");
+    }
+
+    // Items are replaced wholesale — the dialog always submits the full list.
+    const template = await prisma.$transaction(async (tx) => {
+      await tx.packingTemplateItem.deleteMany({ where: { templateId } });
+      return tx.packingTemplate.update({
+        where: { id: templateId },
+        data: { name: input.name, items: { create: input.items } },
+        include: { items: { select: { name: true, category: true } } },
+      });
+    });
+
+    revalidatePath(`/trips/${existing.tripId}/packing`);
+    return {
+      success: true,
+      data: {
+        id: template.id,
+        name: template.name,
+        builtin: false,
+        items: template.items,
+      },
+    };
+  } catch (error) {
+    console.error("updatePackingTemplate failed:", error);
+    return fail("Failed to update the template. Please try again.");
   }
 }
 
@@ -238,6 +279,41 @@ export async function importPackingTemplate(
 /* Helpers (module-private: "use server" files may only export          */
 /* async functions and types)                                           */
 /* ------------------------------------------------------------------ */
+
+/** Trims, drops blank rows, and bounds-checks a template payload. */
+function validateTemplateInput(
+  data: PackingTemplateInput,
+):
+  | { name: string; items: { name: string; category: PackingCategory }[] }
+  | { error: string } {
+  const name = data.name?.trim();
+  if (!name) return { error: "Template name is required." };
+  if (name.length > MAX_NAME_LENGTH) {
+    return {
+      error: `Template name must be ${MAX_NAME_LENGTH} characters or fewer.`,
+    };
+  }
+  const items = (data.items ?? [])
+    .map((i) => ({ name: i.name?.trim() ?? "", category: i.category }))
+    .filter((i) => i.name.length > 0);
+  if (items.length === 0) {
+    return { error: "A template needs at least one item." };
+  }
+  if (items.length > MAX_TEMPLATE_ITEMS) {
+    return { error: `A template can hold at most ${MAX_TEMPLATE_ITEMS} items.` };
+  }
+  for (const item of items) {
+    if (item.name.length > MAX_NAME_LENGTH) {
+      return {
+        error: `Item names must be ${MAX_NAME_LENGTH} characters or fewer.`,
+      };
+    }
+    if (!CATEGORIES.includes(item.category)) {
+      return { error: "Invalid packing category." };
+    }
+  }
+  return { name, items };
+}
 
 /** Checks the caller is a member of a trip, any role. */
 async function tripMemberGate(
