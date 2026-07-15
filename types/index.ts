@@ -274,3 +274,71 @@ export interface ActivityInput {
   cost?: number | null;
   tripDayId: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Packing list — a shared checklist per trip plus a private personal   */
+/* checklist per member                                                 */
+/* ------------------------------------------------------------------ */
+
+export type PackingCategory =
+  | "GEAR"
+  | "CLOTHING"
+  | "TOILETRIES"
+  | "ELECTRONICS"
+  | "DOCUMENTS"
+  | "FOOD"
+  | "OTHER";
+
+/** A packing item with its (optional) assigned member, after serialization. */
+export interface PackingItemWithAssignee {
+  id: string;
+  tripId: string;
+  name: string;
+  category: PackingCategory;
+  /** Checked off on the visible checklist. */
+  packed: boolean;
+  /** Null = shared trip item; set = private item on that member's personal list. */
+  ownerId: string | null;
+  /** ISO datetime string */
+  createdAt: string;
+  assigneeId: string | null;
+  assignee: { id: string; name: string | null; image: string | null } | null;
+}
+
+export interface PackingItemInput {
+  name: string;
+  category: PackingCategory;
+  /** Trip member bringing the item; omit or null for unclaimed. Shared items only. */
+  assigneeId?: string | null;
+  /** True to add to the caller's private personal list instead of the shared one. */
+  personal?: boolean;
+}
+
+/** One entry of a packing template (no id — templates are import sources). */
+export interface PackingTemplateItem {
+  name: string;
+  category: PackingCategory;
+}
+
+/**
+ * A packing template a member can import into their personal checklist.
+ * Built-in templates ship in code and have `"builtin:<key>"` ids; custom
+ * ones are created per trip by OWNER/EDITOR members and have cuid ids.
+ */
+export interface PackingTemplateSummary {
+  id: string;
+  name: string;
+  builtin: boolean;
+  items: PackingTemplateItem[];
+}
+
+export interface PackingTemplateInput {
+  name: string;
+  items: PackingTemplateItem[];
+}
+
+/** Returned by importPackingTemplate: items copied vs. already present. */
+export interface TemplateImportResult {
+  imported: number;
+  skipped: number;
+}
