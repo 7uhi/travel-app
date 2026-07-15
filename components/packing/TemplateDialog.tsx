@@ -96,7 +96,7 @@ export function TemplateDialog({
 
         <form onSubmit={submit} className="space-y-4">
           <label className="block">
-            <span className={labelClass}>Template name</span>
+            <span className={`${labelClass} mb-1.5`}>Template name</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -104,12 +104,17 @@ export function TemplateDialog({
               maxLength={80}
               placeholder="Ski Weekend"
               autoFocus
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
           </label>
 
           <div>
-            <span className={labelClass}>Items</span>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className={`${labelClass} min-w-0 flex-1`}>Item</span>
+              <span className={`${labelClass} w-32 shrink-0`}>Category</span>
+              {/* Spacer matching the remove button so the headers line up. */}
+              <span className="w-7 shrink-0" aria-hidden />
+            </div>
             <div className="space-y-2">
               {rows.map((row, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -119,7 +124,7 @@ export function TemplateDialog({
                     maxLength={80}
                     placeholder={i === 0 ? "Ski goggles" : "Item"}
                     aria-label={`Item ${i + 1} name`}
-                    className={`${inputClass} flex-1`}
+                    className={`${inputClass} min-w-0 flex-1`}
                   />
                   <select
                     value={row.category}
@@ -144,7 +149,7 @@ export function TemplateDialog({
                     }
                     disabled={rows.length === 1}
                     aria-label={`Remove item ${i + 1}`}
-                    className="shrink-0 rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
                   >
                     <X size={15} />
                   </button>
@@ -189,8 +194,11 @@ export function TemplateDialog({
   );
 }
 
+/* No width here — each use site sets its own (w-full / flex-1 / w-32), and
+   Tailwind resolves conflicting width utilities by stylesheet order, not
+   class order, so a baked-in w-full would unpredictably win. */
 const inputClass =
-  "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine";
+  "rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine";
 
 const labelClass =
-  "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500";
+  "block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500";
