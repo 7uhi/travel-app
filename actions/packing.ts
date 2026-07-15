@@ -185,29 +185,63 @@ export async function togglePackingItem(
   }
 }
 
-/** Reassigns (or clears) who's bringing a shared item. Requires OWNER or
- * EDITOR; personal items have no assignee. */
+/**
+ * Edits a packing item: rename, recategorize, and/or reassign. Shared items
+ * require OWNER or EDITOR; personal items may only be edited by their owner
+ * and never carry an assignee. Only the provided fields change.
+ */
 export async function updatePackingItem(
   itemId: string,
-  data: { assigneeId: string | null },
+  data: {
+    name?: string;
+    category?: PackingCategory;
+    assigneeId?: string | null;
+  },
 ): Promise<ActionResult<PackingItemWithAssignee>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to edit this trip.");
   if (!itemId) return fail("Item id is required.");
 
+  const update: {
+    name?: string;
+    category?: PackingCategory;
+    assigneeId?: string | null;
+  } = {};
+  if (data.name !== undefined) {
+    const name = data.name.trim();
+    if (!name) return fail("Item name is required.");
+    if (name.length > MAX_NAME_LENGTH) {
+      return fail(`Item name must be ${MAX_NAME_LENGTH} characters or fewer.`);
+    }
+    update.name = name;
+  }
+  if (data.category !== undefined) {
+    if (!CATEGORIES.includes(data.category)) {
+      return fail("Invalid packing category.");
+    }
+    update.category = data.category;
+  }
+
   try {
     const gate = await packingEditGate(itemId, userId);
     if ("error" in gate) return fail(gate.error);
-    if (gate.ownerId) {
-      return fail("Personal items can't be assigned to a member.");
+
+    if (data.assigneeId !== undefined) {
+      if (gate.ownerId) {
+        return fail("Personal items can't be assigned to a member.");
+      }
+      const assignee = await resolveAssignee(data.assigneeId, gate.tripId);
+      if (assignee && "error" in assignee) return fail(assignee.error);
+      update.assigneeId = assignee ? assignee.id : null;
     }
 
-    const assigneeId = await resolveAssignee(data.assigneeId, gate.tripId);
-    if (assigneeId && "error" in assigneeId) return fail(assigneeId.error);
+    if (Object.keys(update).length === 0) {
+      return fail("Nothing to update.");
+    }
 
     const item = await prisma.packingItem.update({
       where: { id: itemId },
-      data: { assigneeId: assigneeId ? assigneeId.id : null },
+      data: update,
       include: ASSIGNEE_INCLUDE,
     });
 

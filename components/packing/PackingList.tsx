@@ -9,6 +9,7 @@ import {
   togglePackingItem,
   updatePackingItem,
 } from "@/actions/packing";
+import { EditPackingItemButton } from "@/components/packing/EditPackingItemButton";
 import type { ActionResult } from "@/lib/action-result";
 import { groupByCategory } from "@/lib/packing";
 import type { PackingItemWithAssignee } from "@/types";
@@ -134,15 +135,18 @@ export function PackingList({
                         </span>
                       ))}
                     {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => run(() => deletePackingItem(item.id))}
-                        disabled={pending}
-                        aria-label={`Delete ${item.name}`}
-                        className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <>
+                        <EditPackingItemButton item={item} />
+                        <button
+                          type="button"
+                          onClick={() => run(() => deletePackingItem(item.id))}
+                          disabled={pending}
+                          aria-label={`Delete ${item.name}`}
+                          className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </>
                     )}
                   </li>
                   );
