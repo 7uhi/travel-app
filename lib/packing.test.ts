@@ -12,6 +12,8 @@ const item = (
   tripId: "t1",
   name: id,
   category,
+  packed: false,
+  ownerId: null,
   createdAt: new Date().toISOString(),
   assigneeId: null,
   assignee: null,

@@ -29,7 +29,8 @@ model User {
   settlementsFrom Settlement[]   @relation("SettlementsFrom")
   settlementsTo   Settlement[]   @relation("SettlementsTo")
   availability    AvailabilityDay[]
-  packingItems    PackingItem[]
+  packingItems    PackingItem[]     @relation("PackingAssignee")
+  personalPacking PackingItem[]     @relation("PersonalPackingItems")
 }
 
 model Account {
@@ -277,6 +278,7 @@ model PackingItem {
   id        String          @id @default(cuid())
   name      String
   category  PackingCategory @default(OTHER)
+  packed    Boolean         @default(false)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
@@ -286,8 +288,13 @@ model PackingItem {
   // Optional member bringing the item; SetNull so a shared item survives if
   // the assigned member is later removed from the trip.
   assigneeId String?
-  assignee   User?   @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee   User?   @relation("PackingAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
-  @@index([tripId])
+  // Null = shared trip item; set = private item on that member's personal
+  // list. Cascade so personal items don't outlive (and leak from) their owner.
+  ownerId String?
+  owner   User?   @relation("PersonalPackingItems", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, ownerId])
   @@index([assigneeId])
 }

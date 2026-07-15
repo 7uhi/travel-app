@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
 
-import { getPackingItems } from "@/actions/packing";
+import { getPackingItems, getPersonalPackingItems } from "@/actions/packing";
 import { getTripById } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
-import { AddPackingItemButton } from "@/components/packing/AddPackingItemButton";
-import { PackingList } from "@/components/packing/PackingList";
+import { PackingTabs } from "@/components/packing/PackingTabs";
 
 export default async function TripPackingPage({
   params,
@@ -14,16 +13,18 @@ export default async function TripPackingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, itemsRes] = await Promise.all([
+  const [tripRes, sharedRes, personalRes] = await Promise.all([
     getTripById(id),
     getPackingItems(id),
+    getPersonalPackingItems(id),
   ]);
 
   if (!tripRes.success) {
     if (tripRes.error === "Trip not found.") notFound();
     return <LoadError message={tripRes.error} />;
   }
-  if (!itemsRes.success) return <LoadError message={itemsRes.error} />;
+  if (!sharedRes.success) return <LoadError message={sharedRes.error} />;
+  if (!personalRes.success) return <LoadError message={personalRes.error} />;
 
   const trip = tripRes.data;
   const session = await auth();
@@ -42,16 +43,13 @@ export default async function TripPackingPage({
       <TripHeader trip={trip} currentUserRole={role} activeTab="packing" />
 
       <section className="mt-10">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-2xl">Packing</h2>
-          {canEdit && (
-            <AddPackingItemButton tripId={trip.id} members={members} />
-          )}
-        </div>
-        <PackingList
-          items={itemsRes.data}
+        <h2 className="mb-4 font-display text-2xl">Packing</h2>
+        <PackingTabs
+          tripId={trip.id}
+          personalItems={personalRes.data}
+          sharedItems={sharedRes.data}
           members={members}
-          canEdit={canEdit}
+          canEditShared={canEdit}
         />
       </section>
     </main>

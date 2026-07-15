@@ -276,7 +276,8 @@ export interface ActivityInput {
 }
 
 /* ------------------------------------------------------------------ */
-/* Packing list — one shared checklist per trip                         */
+/* Packing list — a shared checklist per trip plus a private personal   */
+/* checklist per member                                                 */
 /* ------------------------------------------------------------------ */
 
 export type PackingCategory =
@@ -294,6 +295,10 @@ export interface PackingItemWithAssignee {
   tripId: string;
   name: string;
   category: PackingCategory;
+  /** Checked off on the visible checklist. */
+  packed: boolean;
+  /** Null = shared trip item; set = private item on that member's personal list. */
+  ownerId: string | null;
   /** ISO datetime string */
   createdAt: string;
   assigneeId: string | null;
@@ -303,6 +308,8 @@ export interface PackingItemWithAssignee {
 export interface PackingItemInput {
   name: string;
   category: PackingCategory;
-  /** Trip member bringing the item; omit or null for unclaimed. */
+  /** Trip member bringing the item; omit or null for unclaimed. Shared items only. */
   assigneeId?: string | null;
+  /** True to add to the caller's private personal list instead of the shared one. */
+  personal?: boolean;
 }

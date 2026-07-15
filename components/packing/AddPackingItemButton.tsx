@@ -13,13 +13,16 @@ interface Member {
   name: string;
 }
 
-/** "Add item" dialog: name, category, and an optional assignee. */
+/** "Add item" dialog: name, category, and (for shared items) an optional
+ * assignee. With `personal`, the item goes on the caller's private list. */
 export function AddPackingItemButton({
   tripId,
   members,
+  personal = false,
 }: {
   tripId: string;
   members: Member[];
+  personal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export function AddPackingItemButton({
           formData.get("category") ?? "OTHER",
         ) as PackingCategory,
         assigneeId: assigneeId || null,
+        personal,
       });
 
       if (!result.success) {
@@ -99,7 +103,11 @@ export function AddPackingItemButton({
                 />
               </Field>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div
+                className={
+                  personal ? undefined : "grid grid-cols-2 gap-4"
+                }
+              >
                 <Field label="Category">
                   <select name="category" defaultValue="OTHER" className={inputClass}>
                     {CATEGORY_ORDER.map((c) => (
@@ -109,16 +117,18 @@ export function AddPackingItemButton({
                     ))}
                   </select>
                 </Field>
-                <Field label="Who's bringing it">
-                  <select name="assigneeId" defaultValue="" className={inputClass}>
-                    <option value="">Unclaimed</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                {!personal && (
+                  <Field label="Who's bringing it">
+                    <select name="assigneeId" defaultValue="" className={inputClass}>
+                      <option value="">Unclaimed</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
               </div>
 
               {error && (

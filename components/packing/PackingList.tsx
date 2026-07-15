@@ -4,7 +4,11 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 
-import { deletePackingItem, updatePackingItem } from "@/actions/packing";
+import {
+  deletePackingItem,
+  togglePackingItem,
+  updatePackingItem,
+} from "@/actions/packing";
 import type { ActionResult } from "@/lib/action-result";
 import { groupByCategory } from "@/lib/packing";
 import type { PackingItemWithAssignee } from "@/types";
@@ -15,18 +19,22 @@ interface Member {
 }
 
 /**
- * The shared list of things to bring, grouped by category. OWNER/EDITOR
- * members can reassign who's bringing each item and delete them; VIEWERs see
- * a read-only list.
+ * A packing checklist grouped by category. The shared variant shows who's
+ * bringing each item; OWNER/EDITOR members can check items off, reassign, and
+ * delete, while VIEWERs see a read-only list. The personal variant is the
+ * signed-in member's private list, so everything is editable and there's no
+ * assignee.
  */
 export function PackingList({
   items,
   members,
   canEdit,
+  variant,
 }: {
   items: PackingItemWithAssignee[];
   members: Member[];
   canEdit: boolean;
+  variant: "shared" | "personal";
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -48,9 +56,11 @@ export function PackingList({
     <div className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-stone-500">
-          {canEdit
-            ? "Add your first item to start the packing list."
-            : "No packing items yet."}
+          {!canEdit
+            ? "No packing items yet."
+            : variant === "personal"
+              ? "Add your first item to start your personal packing list."
+              : "Add your first item to start the packing list."}
         </p>
       ) : (
         <div className="space-y-5">
@@ -62,10 +72,28 @@ export function PackingList({
               <ul className="divide-y divide-stone-100">
                 {group.items.map((item) => (
                   <li key={item.id} className="flex items-center gap-3 py-2">
-                    <span className="flex-1 text-sm text-ink">{item.name}</span>
+                    <input
+                      type="checkbox"
+                      checked={item.packed}
+                      disabled={!canEdit || pending}
+                      onChange={(e) =>
+                        run(() => togglePackingItem(item.id, e.target.checked))
+                      }
+                      aria-label={`Mark ${item.name} as packed`}
+                      className="size-4 shrink-0 accent-pine disabled:opacity-60"
+                    />
+                    <span
+                      className={`flex-1 text-sm ${
+                        item.packed
+                          ? "text-stone-400 line-through decoration-stone-300"
+                          : "text-ink"
+                      }`}
+                    >
+                      {item.name}
+                    </span>
 
-                    {canEdit ? (
-                      <>
+                    {variant === "shared" &&
+                      (canEdit ? (
                         <select
                           value={item.assigneeId ?? ""}
                           disabled={pending}
@@ -86,20 +114,21 @@ export function PackingList({
                             </option>
                           ))}
                         </select>
-                        <button
-                          type="button"
-                          onClick={() => run(() => deletePackingItem(item.id))}
-                          disabled={pending}
-                          aria-label={`Delete ${item.name}`}
-                          className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-xs text-stone-400">
-                        {item.assignee?.name ?? "—"}
-                      </span>
+                      ) : (
+                        <span className="text-xs text-stone-400">
+                          {item.assignee?.name ?? "—"}
+                        </span>
+                      ))}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => run(() => deletePackingItem(item.id))}
+                        disabled={pending}
+                        aria-label={`Delete ${item.name}`}
+                        className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     )}
                   </li>
                 ))}

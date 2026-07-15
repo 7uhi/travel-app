@@ -35,7 +35,7 @@ const ASSIGNEE_INCLUDE = {
 /* Actions                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Lists a trip's packing items. Requires membership on the trip. */
+/** Lists a trip's shared packing items. Requires membership on the trip. */
 export async function getPackingItems(
   tripId: string,
 ): Promise<ActionResult<PackingItemWithAssignee[]>> {
@@ -51,7 +51,7 @@ export async function getPackingItems(
     if (!trip) return fail("Trip not found.");
 
     const items = await prisma.packingItem.findMany({
-      where: { tripId },
+      where: { tripId, ownerId: null },
       include: ASSIGNEE_INCLUDE,
       orderBy: { createdAt: "asc" },
     });
@@ -64,8 +64,41 @@ export async function getPackingItems(
 }
 
 /**
- * Adds an item to a trip's packing list. Requires OWNER or EDITOR membership;
- * an optional assignee must themselves be a member of the trip.
+ * Lists the caller's private personal packing items for a trip. Requires
+ * membership; other members' personal lists are never returned.
+ */
+export async function getPersonalPackingItems(
+  tripId: string,
+): Promise<ActionResult<PackingItemWithAssignee[]>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to view this trip.");
+  if (!tripId) return fail("Trip id is required.");
+
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: tripId, members: { some: { userId } } },
+      select: { id: true },
+    });
+    if (!trip) return fail("Trip not found.");
+
+    const items = await prisma.packingItem.findMany({
+      where: { tripId, ownerId: userId },
+      include: ASSIGNEE_INCLUDE,
+      orderBy: { createdAt: "asc" },
+    });
+
+    return { success: true, data: items.map(serializePackingItem) };
+  } catch (error) {
+    console.error("getPersonalPackingItems failed:", error);
+    return fail("Failed to load your packing list. Please try again.");
+  }
+}
+
+/**
+ * Adds an item to a trip's packing list. Shared items require OWNER or EDITOR
+ * membership and may name an assignee (who must be a member). Personal items
+ * (`data.personal`) go on the caller's private list — any member may add them
+ * since they don't affect the group — and never carry an assignee.
  */
 export async function addPackingItem(
   tripId: string,
@@ -85,18 +118,26 @@ export async function addPackingItem(
   }
 
   try {
-    const gate = await tripEditGate(tripId, userId);
-    if ("error" in gate) return fail(gate.error);
+    let assigneeId: string | null = null;
+    if (data.personal) {
+      const gate = await tripMemberGate(tripId, userId);
+      if ("error" in gate) return fail(gate.error);
+    } else {
+      const gate = await tripEditGate(tripId, userId);
+      if ("error" in gate) return fail(gate.error);
 
-    const assigneeId = await resolveAssignee(data.assigneeId, tripId);
-    if (assigneeId && "error" in assigneeId) return fail(assigneeId.error);
+      const assignee = await resolveAssignee(data.assigneeId, tripId);
+      if (assignee && "error" in assignee) return fail(assignee.error);
+      assigneeId = assignee ? assignee.id : null;
+    }
 
     const item = await prisma.packingItem.create({
       data: {
         tripId,
         name,
         category: data.category,
-        assigneeId: assigneeId ? assigneeId.id : null,
+        assigneeId,
+        ownerId: data.personal ? userId : null,
       },
       include: ASSIGNEE_INCLUDE,
     });
@@ -109,7 +150,42 @@ export async function addPackingItem(
   }
 }
 
-/** Reassigns (or clears) who's bringing an item. Requires OWNER or EDITOR. */
+/** Checks an item on or off the checklist. Shared items require OWNER or
+ * EDITOR; personal items may only be toggled by their owner. */
+export async function togglePackingItem(
+  itemId: string,
+  packed: boolean,
+): Promise<ActionResult<PackingItemWithAssignee>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to edit this trip.");
+  if (!itemId) return fail("Item id is required.");
+
+  try {
+    const gate = await packingEditGate(itemId, userId);
+    if ("error" in gate) return fail(gate.error);
+
+    const item = await prisma.packingItem.update({
+      where: { id: itemId },
+      data: { packed },
+      include: ASSIGNEE_INCLUDE,
+    });
+
+    revalidatePath(`/trips/${gate.tripId}/packing`);
+    return { success: true, data: serializePackingItem(item) };
+  } catch (error) {
+    console.error("togglePackingItem failed:", error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return fail("Packing item not found.");
+    }
+    return fail("Failed to update the item. Please try again.");
+  }
+}
+
+/** Reassigns (or clears) who's bringing a shared item. Requires OWNER or
+ * EDITOR; personal items have no assignee. */
 export async function updatePackingItem(
   itemId: string,
   data: { assigneeId: string | null },
@@ -121,6 +197,9 @@ export async function updatePackingItem(
   try {
     const gate = await packingEditGate(itemId, userId);
     if ("error" in gate) return fail(gate.error);
+    if (gate.ownerId) {
+      return fail("Personal items can't be assigned to a member.");
+    }
 
     const assigneeId = await resolveAssignee(data.assigneeId, gate.tripId);
     if (assigneeId && "error" in assigneeId) return fail(assigneeId.error);
@@ -145,7 +224,8 @@ export async function updatePackingItem(
   }
 }
 
-/** Deletes a packing item. Requires OWNER or EDITOR membership on its trip. */
+/** Deletes a packing item. Shared items require OWNER or EDITOR membership;
+ * personal items may only be deleted by their owner. */
 export async function deletePackingItem(
   itemId: string,
 ): Promise<ActionResult<{ id: string }>> {
@@ -197,15 +277,34 @@ async function tripEditGate(
   return {};
 }
 
-/** Resolves a packing item to its trip and checks the caller may edit it. */
+/** Checks the caller is a member of a trip, any role. */
+async function tripMemberGate(
+  tripId: string,
+  userId: string,
+): Promise<Record<string, never> | { error: string }> {
+  const member = await prisma.tripMember.findUnique({
+    where: { userId_tripId: { userId, tripId } },
+    select: { id: true },
+  });
+  if (!member) return { error: "Trip not found." };
+  return {};
+}
+
+/**
+ * Resolves a packing item to its trip and checks the caller may edit it.
+ * Shared items need OWNER/EDITOR membership; personal items only their owner
+ * (any role) — anyone else's personal item reads as missing, no existence
+ * leaks.
+ */
 async function packingEditGate(
   itemId: string,
   userId: string,
-): Promise<{ tripId: string } | { error: string }> {
+): Promise<{ tripId: string; ownerId: string | null } | { error: string }> {
   const item = await prisma.packingItem.findUnique({
     where: { id: itemId },
     select: {
       tripId: true,
+      ownerId: true,
       trip: {
         select: { members: { where: { userId }, select: { role: true } } },
       },
@@ -214,10 +313,12 @@ async function packingEditGate(
 
   const membership = item?.trip.members[0];
   if (!item || !membership) return { error: "Packing item not found." };
-  if (membership.role === "VIEWER") {
+  if (item.ownerId) {
+    if (item.ownerId !== userId) return { error: "Packing item not found." };
+  } else if (membership.role === "VIEWER") {
     return { error: "You don't have permission to edit this trip." };
   }
-  return { tripId: item.tripId };
+  return { tripId: item.tripId, ownerId: item.ownerId };
 }
 
 /**
@@ -252,6 +353,8 @@ function serializePackingItem(
     tripId: item.tripId,
     name: item.name,
     category: item.category,
+    packed: item.packed,
+    ownerId: item.ownerId,
     createdAt: item.createdAt.toISOString(),
     assigneeId: item.assigneeId,
     assignee: item.assignee
