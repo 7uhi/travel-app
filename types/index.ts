@@ -342,3 +342,39 @@ export interface TemplateImportResult {
   imported: number;
   skipped: number;
 }
+
+/* ------------------------------------------------------------------ */
+/* Activity ideas — a voting pool that feeds the itinerary              */
+/* ------------------------------------------------------------------ */
+
+/** An idea with its votes, after serialization. getIdeas returns these sorted by votes. */
+export interface ActivityIdeaWithVotes {
+  id: string;
+  tripId: string;
+  title: string;
+  description: string | null;
+  locationName: string | null;
+  /** External reference (booking page, review site, …); always https?:// */
+  link: string | null;
+  estimatedCost: number | null;
+  /** ISO datetime; set once the idea has been added to the itinerary. */
+  promotedAt: string | null;
+  createdById: string | null;
+  createdBy: { id: string; name: string | null; image: string | null } | null;
+  /** ISO datetime string */
+  createdAt: string;
+  /** ISO datetime string */
+  updatedAt: string;
+  votes: {
+    userId: string;
+    user: { id: string; name: string | null; image: string | null };
+  }[];
+}
+
+export interface ActivityIdeaInput {
+  title: string;
+  description?: string | null;
+  locationName?: string | null;
+  link?: string | null;
+  estimatedCost?: number | null;
+}
