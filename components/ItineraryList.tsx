@@ -21,7 +21,7 @@ interface DialogState {
 
 export function ItineraryList({
   days,
-  currency = "EUR",
+  currency = "USD",
   canEdit = false,
 }: ItineraryListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});

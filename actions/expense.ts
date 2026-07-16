@@ -91,7 +91,7 @@ export async function createExpense(
       include: EXPENSE_INCLUDE,
     });
 
-    revalidatePath(`/trips/${tripId}/expenses`);
+    revalidateTripPages(tripId);
     return { success: true, data: serializeExpense(expense) };
   } catch (error) {
     console.error("createExpense failed:", error);
@@ -146,7 +146,7 @@ export async function updateExpense(
       include: EXPENSE_INCLUDE,
     });
 
-    revalidatePath(`/trips/${existing!.tripId}/expenses`);
+    revalidateTripPages(existing!.tripId);
     return { success: true, data: serializeExpense(expense) };
   } catch (error) {
     console.error("updateExpense failed:", error);
@@ -176,7 +176,7 @@ export async function deleteExpense(
 
     await prisma.expense.delete({ where: { id: expenseId } });
 
-    revalidatePath(`/trips/${existing!.tripId}/expenses`);
+    revalidateTripPages(existing!.tripId);
     return { success: true, data: { id: expenseId } };
   } catch (error) {
     console.error("deleteExpense failed:", error);
@@ -269,6 +269,35 @@ export async function getTripExpenses(
 }
 
 /**
+ * Total logged spending for a trip in cents. Members only. Cheap aggregate
+ * for pages that show the budget header without loading full expenses.
+ */
+export async function getTripSpentCents(
+  tripId: string,
+): Promise<ActionResult<number>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to view spending.");
+  if (!tripId) return fail("Trip id is required.");
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { id: true },
+    });
+    if (!membership) return fail("Trip not found.");
+
+    const agg = await prisma.expense.aggregate({
+      where: { tripId },
+      _sum: { amountCents: true },
+    });
+    return { success: true, data: agg._sum.amountCents ?? 0 };
+  } catch (error) {
+    console.error("getTripSpentCents failed:", error);
+    return fail("Failed to load spending. Please try again.");
+  }
+}
+
+/**
  * Each member's net position (paid − owed, adjusted by settlements) plus the
  * greedy-simplified "who pays whom" list. Members only.
  */
@@ -340,6 +369,13 @@ const EXPENSE_INCLUDE = {
   paidBy: true,
   splits: { include: { user: true } },
 } as const;
+
+/** Spending totals surface in every tab's header, so refresh all trip pages. */
+function revalidateTripPages(tripId: string): void {
+  revalidatePath(`/trips/${tripId}`);
+  revalidatePath(`/trips/${tripId}/expenses`);
+  revalidatePath(`/trips/${tripId}/packing`);
+}
 
 type Membership = { userId: string; role: "OWNER" | "EDITOR" | "VIEWER" };
 

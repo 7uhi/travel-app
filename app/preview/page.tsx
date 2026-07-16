@@ -62,7 +62,7 @@ const mockTrip: TripWithDays = {
   windowEnd: null,
   durationDays: null,
   totalBudget: 2000,
-  currency: "EUR",
+  currency: "USD",
   createdAt: T,
   updatedAt: T,
   members: [

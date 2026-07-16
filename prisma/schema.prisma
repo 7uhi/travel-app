@@ -90,7 +90,7 @@ model Trip {
   durationDays Int?
   totalBudget Decimal? @db.Decimal(12, 2)
   // Single currency per trip: expense splitting and balances assume it.
-  currency    String   @default("EUR")
+  currency    String   @default("USD")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -7,7 +7,7 @@
  * viewer's timezone.
  */
 
-export function formatCurrency(amount: number, currency = "EUR"): string {
+export function formatCurrency(amount: number, currency = "USD"): string {
   return new Intl.NumberFormat("en", {
     style: "currency",
     currency,
@@ -16,8 +16,8 @@ export function formatCurrency(amount: number, currency = "EUR"): string {
   }).format(amount);
 }
 
-/** Integer cents → "€45.00". Intl handles 0-decimal currencies like JPY. */
-export function formatCents(cents: number, currency = "EUR"): string {
+/** Integer cents → "$45.00". Intl handles 0-decimal currencies like JPY. */
+export function formatCents(cents: number, currency = "USD"): string {
   return new Intl.NumberFormat("en", { style: "currency", currency }).format(
     cents / 100,
   );

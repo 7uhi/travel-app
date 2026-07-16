@@ -7,6 +7,7 @@ import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
 import { AddExpenseButton } from "@/components/expenses/AddExpenseButton";
 import { BalancesPanel } from "@/components/expenses/BalancesPanel";
+import { CurrencyPicker } from "@/components/expenses/CurrencyPicker";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
 
 export default async function TripExpensesPage({
@@ -42,24 +43,39 @@ export default async function TripExpensesPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <TripHeader trip={trip} currentUserRole={role} activeTab="expenses" />
+      <TripHeader
+        trip={trip}
+        currentUserRole={role}
+        activeTab="expenses"
+        spentCents={expensesRes.data.reduce((s, e) => s + e.amountCents, 0)}
+      />
 
       <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-2xl">Expenses</h2>
-            {canEdit && currentUserId && (
-              <AddExpenseButton
-                tripId={trip.id}
-                currency={trip.currency}
-                members={members}
-                currentUserId={currentUserId}
-              />
-            )}
+            <div className="flex flex-wrap items-center gap-3">
+              {role === "OWNER" && (
+                <CurrencyPicker
+                  tripId={trip.id}
+                  currency={trip.currency}
+                  hasExpenses={expensesRes.data.length > 0}
+                />
+              )}
+              {canEdit && currentUserId && (
+                <AddExpenseButton
+                  tripId={trip.id}
+                  currency={trip.currency}
+                  members={members}
+                  currentUserId={currentUserId}
+                />
+              )}
+            </div>
           </div>
           <ExpenseList
             expenses={expensesRes.data}
             currency={trip.currency}
+            members={members}
             currentUserId={currentUserId}
             isOwner={role === "OWNER"}
           />

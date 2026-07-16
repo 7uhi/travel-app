@@ -67,6 +67,45 @@ export function splitByPercent(
   return shares.map((s, i) => ({ userId: s.userId, amountCents: result[i] }));
 }
 
+/**
+ * Distributes an extra amount (e.g. tip + tax) across participants in
+ * proportion to their weights (item subtotals). Same largest-remainder
+ * rounding as splitByPercent, so the result always sums exactly to
+ * extraCents. A zero extra returns all-zero shares.
+ */
+export function prorate(
+  extraCents: number,
+  weights: { userId: string; weightCents: number }[],
+): Share[] {
+  if (!Number.isInteger(extraCents) || extraCents < 0) {
+    throw new Error("Extra amount must be a non-negative whole number of cents.");
+  }
+  if (weights.length === 0) {
+    throw new Error("At least one participant is required.");
+  }
+  if (weights.some((w) => !Number.isInteger(w.weightCents) || w.weightCents <= 0)) {
+    throw new Error("Each weight must be a positive whole number of cents.");
+  }
+
+  const totalWeight = weights.reduce((s, w) => s + w.weightCents, 0);
+  const raw = weights.map((w) => (extraCents * w.weightCents) / totalWeight);
+  const floored = raw.map(Math.floor);
+  let leftover = extraCents - floored.reduce((a, b) => a + b, 0);
+
+  const order = raw
+    .map((value, index) => ({ index, frac: value - Math.floor(value) }))
+    .sort((a, b) => b.frac - a.frac || a.index - b.index);
+
+  const result = floored.slice();
+  for (const { index } of order) {
+    if (leftover <= 0) break;
+    result[index] += 1;
+    leftover -= 1;
+  }
+
+  return weights.map((w, i) => ({ userId: w.userId, amountCents: result[i] }));
+}
+
 /** Validates user-provided exact shares against the expense total. */
 export function validateExactShares(
   totalCents: number,
@@ -78,7 +117,7 @@ export function validateExactShares(
   }
   const sum = shares.reduce((s, x) => s + x.amountCents, 0);
   if (sum !== totalCents) {
-    return `Shares add up to ${sum} cents but the expense is ${totalCents} cents.`;
+    return `Shares add up to ${(sum / 100).toFixed(2)} but the expense total is ${(totalCents / 100).toFixed(2)}.`;
   }
   return null;
 }

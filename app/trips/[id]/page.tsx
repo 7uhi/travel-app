@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getTripAvailability } from "@/actions/availability";
+import { getTripSpentCents } from "@/actions/expense";
 import { getTripById } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
@@ -12,7 +13,10 @@ export default async function TripPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const result = await getTripById(id);
+  const [result, spentRes] = await Promise.all([
+    getTripById(id),
+    getTripSpentCents(id),
+  ]);
 
   if (!result.success) {
     if (result.error === "Trip not found.") notFound();
@@ -37,6 +41,7 @@ export default async function TripPage({
       currentUserRole={currentUserRole}
       availability={availability}
       currentUserId={currentUserId}
+      spentCents={spentRes.success ? spentRes.data : null}
     />
   );
 }
