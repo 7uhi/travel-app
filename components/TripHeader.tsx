@@ -8,7 +8,7 @@ import type { TripRole, TripWithDays } from "@/types";
 
 const MS_PER_DAY = 86_400_000;
 
-export type TripTab = "itinerary" | "expenses" | "packing";
+export type TripTab = "itinerary" | "ideas" | "expenses" | "packing";
 
 /**
  * Shared top section of every trip page: breadcrumb, hero, stat cards, and
@@ -237,6 +237,12 @@ export function TripHeader({
         <nav className="mt-8 flex gap-2" aria-label="Trip sections">
           <TabLink href={`/trips/${trip.id}`} active={activeTab === "itinerary"}>
             Itinerary
+          </TabLink>
+          <TabLink
+            href={`/trips/${trip.id}/ideas`}
+            active={activeTab === "ideas"}
+          >
+            Ideas
           </TabLink>
           <TabLink
             href={`/trips/${trip.id}/expenses`}
