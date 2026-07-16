@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { getTripSpentCents } from "@/actions/expense";
 import { getPackingItems, getPersonalPackingItems } from "@/actions/packing";
 import { getPackingTemplates } from "@/actions/packing-templates";
 import { getTripById } from "@/actions/trip";
@@ -14,12 +15,14 @@ export default async function TripPackingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, sharedRes, personalRes, templatesRes] = await Promise.all([
-    getTripById(id),
-    getPackingItems(id),
-    getPersonalPackingItems(id),
-    getPackingTemplates(id),
-  ]);
+  const [tripRes, sharedRes, personalRes, templatesRes, spentRes] =
+    await Promise.all([
+      getTripById(id),
+      getPackingItems(id),
+      getPersonalPackingItems(id),
+      getPackingTemplates(id),
+      getTripSpentCents(id),
+    ]);
 
   if (!tripRes.success) {
     if (tripRes.error === "Trip not found.") notFound();
@@ -43,7 +46,12 @@ export default async function TripPackingPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <TripHeader trip={trip} currentUserRole={role} activeTab="packing" />
+      <TripHeader
+        trip={trip}
+        currentUserRole={role}
+        activeTab="packing"
+        spentCents={spentRes.success ? spentRes.data : null}
+      />
 
       <section className="mt-10">
         <h2 className="mb-4 font-display text-2xl">Packing</h2>

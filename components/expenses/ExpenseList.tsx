@@ -10,6 +10,8 @@ import {
 
 import { Avatar } from "@/components/Avatar";
 import { DeleteExpenseButton } from "@/components/expenses/DeleteExpenseButton";
+import { EditExpenseButton } from "@/components/expenses/EditExpenseButton";
+import type { Member } from "@/components/expenses/ExpenseDialog";
 import { formatCents, formatDayDate } from "@/lib/format";
 import type { ExpenseCategory, ExpenseWithDetails } from "@/types";
 
@@ -26,11 +28,13 @@ const CATEGORY_META: Record<ExpenseCategory, { icon: LucideIcon; label: string }
 export function ExpenseList({
   expenses,
   currency,
+  members,
   currentUserId,
   isOwner,
 }: {
   expenses: ExpenseWithDetails[];
   currency: string;
+  members: Member[];
   currentUserId: string | null;
   isOwner: boolean;
 }) {
@@ -72,7 +76,9 @@ export function ExpenseList({
                 key={expense.id}
                 expense={expense}
                 currency={currency}
-                canDelete={
+                members={members}
+                currentUserId={currentUserId}
+                canModify={
                   isOwner || expense.paidBy.id === (currentUserId ?? "")
                 }
               />
@@ -87,11 +93,15 @@ export function ExpenseList({
 function ExpenseRow({
   expense,
   currency,
-  canDelete,
+  members,
+  currentUserId,
+  canModify,
 }: {
   expense: ExpenseWithDetails;
   currency: string;
-  canDelete: boolean;
+  members: Member[];
+  currentUserId: string | null;
+  canModify: boolean;
 }) {
   const { icon: Icon, label } = CATEGORY_META[expense.category];
   const splitCount = expense.splits.length;
@@ -120,7 +130,15 @@ function ExpenseRow({
       <p className="shrink-0 text-sm font-medium tabular-nums">
         {formatCents(expense.amountCents, currency)}
       </p>
-      {canDelete && <DeleteExpenseButton expenseId={expense.id} />}
+      {canModify && currentUserId && (
+        <EditExpenseButton
+          expense={expense}
+          currency={currency}
+          members={members}
+          currentUserId={currentUserId}
+        />
+      )}
+      {canModify && <DeleteExpenseButton expenseId={expense.id} />}
     </li>
   );
 }

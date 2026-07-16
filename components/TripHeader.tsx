@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, MapPin, Sun } from "lucide-react";
 
+import { EditBudgetButton } from "@/components/EditBudgetButton";
 import { ShareTripButton } from "@/components/ShareTripButton";
 import { formatCurrency, formatDateRange, formatDayDate } from "@/lib/format";
 import { tripStatus } from "@/lib/trip-status";
@@ -20,6 +21,7 @@ export function TripHeader({
   activeTab = "itinerary",
   showTabs = true,
   respondedCount = null,
+  spentCents = null,
 }: {
   trip: TripWithDays;
   currentUserRole?: TripRole | null;
@@ -27,6 +29,8 @@ export function TripHeader({
   showTabs?: boolean;
   /** Members who marked availability; only shown while the trip is unscheduled. */
   respondedCount?: number | null;
+  /** Total logged expenses; null when the page didn't load spending. */
+  spentCents?: number | null;
 }) {
   const activities = trip.days.flatMap((day) => day.activities);
   const plannedCost = activities.reduce((sum, a) => sum + (a.cost ?? 0), 0);
@@ -56,9 +60,29 @@ export function TripHeader({
           ? `Happening now · day ${currentDayNumber} of ${trip.days.length}`
           : "Past trip";
 
+  // The budget card leads with the plan before the trip and with actual
+  // spending once it's underway; the other figure becomes the secondary line.
+  // Exception: with no costs planned, a "$0 planned" headline would bury real
+  // spending, so spending leads whenever it's the only signal.
+  const spent = spentCents !== null ? spentCents / 100 : null;
+  const primaryIsSpent =
+    spent !== null &&
+    (status === "ongoing" ||
+      status === "past" ||
+      (spent > 0 && plannedCost === 0));
+  const primaryAmount = primaryIsSpent ? spent : plannedCost;
+  const primaryVerb = primaryIsSpent ? "spent" : "planned";
+  const secondaryText = primaryIsSpent
+    ? plannedCost > 0
+      ? `${formatCurrency(plannedCost, trip.currency)} planned`
+      : null
+    : spent !== null && spent > 0
+      ? `${formatCurrency(spent, trip.currency)} spent so far`
+      : null;
+
   const budgetPct =
     trip.totalBudget && trip.totalBudget > 0
-      ? Math.round((plannedCost / trip.totalBudget) * 100)
+      ? Math.round((primaryAmount / trip.totalBudget) * 100)
       : null;
 
   return (
@@ -78,10 +102,18 @@ export function TripHeader({
             {statusChip}
           </span>
           <span className="flex items-center gap-2">
-            {trip.totalBudget !== null && (
-              <span className="rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium backdrop-blur">
-                Budget · {formatCurrency(trip.totalBudget, trip.currency)}
-              </span>
+            {currentUserRole === "OWNER" ? (
+              <EditBudgetButton
+                tripId={trip.id}
+                totalBudget={trip.totalBudget}
+                currency={trip.currency}
+              />
+            ) : (
+              trip.totalBudget !== null && (
+                <span className="rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium backdrop-blur">
+                  Budget · {formatCurrency(trip.totalBudget, trip.currency)}
+                </span>
+              )
             )}
             {currentUserRole === "OWNER" && (
               <ShareTripButton tripId={trip.id} />
@@ -186,7 +218,7 @@ export function TripHeader({
 
         <StatCard label="Trip budget">
           <p className="font-display text-4xl">
-            {formatCurrency(plannedCost, trip.currency)}
+            {formatCurrency(primaryAmount, trip.currency)}
             {trip.totalBudget !== null && (
               <span className="ml-2 font-sans text-sm font-normal text-stone-500">
                 of {formatCurrency(trip.totalBudget, trip.currency)}
@@ -205,13 +237,23 @@ export function TripHeader({
               </div>
               <p className="mt-2 text-sm text-stone-500">
                 {budgetPct > 100
-                  ? `${budgetPct - 100}% over budget`
-                  : `${budgetPct}% of budget planned`}
+                  ? `${budgetPct - 100}% over budget ${primaryVerb}`
+                  : `${budgetPct}% of budget ${primaryVerb}`}
+                {secondaryText && ` · ${secondaryText}`}
               </p>
             </>
           ) : (
             <p className="mt-2 text-sm text-stone-500">
-              planned so far · no budget set
+              {primaryVerb} so far · no budget set
+              {secondaryText && ` · ${secondaryText}`}
+            </p>
+          )}
+          {trip.members.length > 1 && (
+            <p className="mt-1 text-xs text-stone-500">
+              ≈ {formatCurrency(primaryAmount / trip.members.length, trip.currency)}{" "}
+              per person
+              {trip.totalBudget !== null &&
+                ` · ${formatCurrency(trip.totalBudget / trip.members.length, trip.currency)} budgeted`}
             </p>
           )}
         </StatCard>

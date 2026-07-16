@@ -11,6 +11,7 @@ import type {
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
+import { isSupportedCurrency } from "@/lib/currencies";
 import {
   dayDatesBetween,
   inclusiveDayCount,
@@ -211,6 +212,94 @@ export async function getTripById(
   } catch (error) {
     console.error("getTripById failed:", error);
     return fail("Failed to load trip. Please try again.");
+  }
+}
+
+/**
+ * Changes the trip's currency. OWNER only. Existing expenses are relabeled to
+ * the new currency (amounts are not converted — the trip is single-currency,
+ * so balances and totals stay coherent).
+ */
+export async function updateTripCurrency(
+  tripId: string,
+  currency: string,
+): Promise<ActionResult<{ currency: string }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to change the currency.");
+  if (!tripId) return fail("Trip id is required.");
+
+  if (!isSupportedCurrency(currency)) {
+    return fail("Unsupported currency code.");
+  }
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { role: true },
+    });
+    if (!membership) return fail("Trip not found.");
+    if (membership.role !== "OWNER") {
+      return fail("Only the trip owner can change the currency.");
+    }
+
+    await prisma.$transaction([
+      prisma.trip.update({ where: { id: tripId }, data: { currency } }),
+      prisma.expense.updateMany({ where: { tripId }, data: { currency } }),
+    ]);
+
+    revalidatePath(`/trips/${tripId}`);
+    revalidatePath(`/trips/${tripId}/expenses`);
+    return { success: true, data: { currency } };
+  } catch (error) {
+    console.error("updateTripCurrency failed:", error);
+    return fail("Failed to change the currency. Please try again.");
+  }
+}
+
+/** Sets or clears (null) the trip's total budget. OWNER only. */
+export async function updateTripBudget(
+  tripId: string,
+  totalBudget: number | null,
+): Promise<ActionResult<{ totalBudget: number | null }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to change the budget.");
+  if (!tripId) return fail("Trip id is required.");
+
+  if (
+    totalBudget != null &&
+    (!Number.isFinite(totalBudget) || totalBudget < 0)
+  ) {
+    return fail("Total budget must be a non-negative number.");
+  }
+  // Decimal(12,2) column: keep cents precision and stay within range.
+  const budget =
+    totalBudget == null ? null : Math.round(totalBudget * 100) / 100;
+  if (budget != null && budget >= 1e10) {
+    return fail("Total budget is too large.");
+  }
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { role: true },
+    });
+    if (!membership) return fail("Trip not found.");
+    if (membership.role !== "OWNER") {
+      return fail("Only the trip owner can change the budget.");
+    }
+
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { totalBudget: budget },
+    });
+
+    revalidatePath(`/trips/${tripId}`);
+    revalidatePath(`/trips/${tripId}/expenses`);
+    revalidatePath(`/trips/${tripId}/packing`);
+    return { success: true, data: { totalBudget: budget } };
+  } catch (error) {
+    console.error("updateTripBudget failed:", error);
+    return fail("Failed to change the budget. Please try again.");
   }
 }
 

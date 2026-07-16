@@ -14,6 +14,7 @@ export function TripDashboard({
   showTabs = true,
   availability = null,
   currentUserId = null,
+  spentCents = null,
 }: {
   trip: TripWithDays;
   /** The viewer's membership role; controls owner-only UI like sharing. */
@@ -22,6 +23,8 @@ export function TripDashboard({
   /** The date poll; only provided (and shown) while the trip has no dates. */
   availability?: TripAvailability | null;
   currentUserId?: string | null;
+  /** Total logged expenses; null when spending wasn't loaded. */
+  spentCents?: number | null;
 }) {
   const scheduled = trip.startDate !== null;
   const respondedCount = availability
@@ -40,6 +43,7 @@ export function TripDashboard({
         activeTab="itinerary"
         showTabs={showTabs}
         respondedCount={scheduled ? null : respondedCount}
+        spentCents={spentCents}
       />
 
       <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">

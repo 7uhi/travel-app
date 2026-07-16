@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 
-import { createExpense } from "@/actions/expense";
+import { updateExpense } from "@/actions/expense";
 import { ExpenseDialog, type Member } from "@/components/expenses/ExpenseDialog";
-import type { ExpenseInput } from "@/types";
+import type { ExpenseInput, ExpenseWithDetails } from "@/types";
 
-/** Opens the shared expense dialog in "add" mode. */
-export function AddExpenseButton({
-  tripId,
+/** Opens the shared expense dialog prefilled with an existing expense. */
+export function EditExpenseButton({
+  expense,
   currency,
   members,
   currentUserId,
 }: {
-  tripId: string;
+  expense: ExpenseWithDetails;
   currency: string;
   members: Member[];
   currentUserId: string;
@@ -24,7 +24,7 @@ export function AddExpenseButton({
   const router = useRouter();
 
   async function handleSubmit(data: ExpenseInput) {
-    const result = await createExpense(tripId, data);
+    const result = await updateExpense(expense.id, data);
     if (result.success) router.refresh();
     return result;
   }
@@ -34,20 +34,21 @@ export function AddExpenseButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-full bg-pine px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-dark"
+        aria-label="Edit expense"
+        className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-ink"
       >
-        <Plus size={16} />
-        Add expense
+        <Pencil size={15} />
       </button>
 
       {open && (
         <ExpenseDialog
-          title="Add expense"
-          submitLabel="Add expense"
-          pendingLabel="Adding…"
+          title="Edit expense"
+          submitLabel="Save changes"
+          pendingLabel="Saving…"
           currency={currency}
           members={members}
           currentUserId={currentUserId}
+          expense={expense}
           onClose={() => setOpen(false)}
           onSubmit={handleSubmit}
         />
