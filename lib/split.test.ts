@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { prorate } from "./split";
+import {
+  computeBalances,
+  prorate,
+  simplifyDebts,
+  type Payment,
+} from "./split";
 
 const w = (userId: string, weightCents: number) => ({ userId, weightCents });
 
@@ -54,5 +59,115 @@ describe("prorate", () => {
     expect(() => prorate(100, [])).toThrow();
     expect(() => prorate(100, [w("a", 0)])).toThrow();
     expect(() => prorate(100, [w("a", 100), w("b", -5)])).toThrow();
+  });
+});
+
+/** Applies payments to a copy of the balances; result should be all zeros. */
+function settle(
+  balances: Map<string, number>,
+  payments: Payment[],
+): Map<string, number> {
+  const next = new Map(balances);
+  for (const p of payments) {
+    next.set(p.fromUserId, (next.get(p.fromUserId) ?? 0) + p.amountCents);
+    next.set(p.toUserId, (next.get(p.toUserId) ?? 0) - p.amountCents);
+  }
+  return next;
+}
+
+const MEMBER_ORDER = ["kevin", "yuhi", "eshan", "dj", "andrew"];
+
+describe("simplifyDebts", () => {
+  const balances = new Map([
+    ["kevin", 90_000],
+    ["andrew", 40_000],
+    ["yuhi", -50_000],
+    ["eshan", -30_000],
+    ["dj", -50_000],
+  ]);
+
+  it("zeroes every balance with at most n−1 payments", () => {
+    const payments = simplifyDebts(balances, MEMBER_ORDER);
+    expect(payments.length).toBeLessThanOrEqual(balances.size - 1);
+    for (const cents of settle(balances, payments).values()) {
+      expect(cents).toBe(0);
+    }
+  });
+
+  it("pairs in member order, not amount order", () => {
+    const payments = simplifyDebts(balances, MEMBER_ORDER);
+    // yuhi (first debtor) fills kevin (first creditor), then eshan and dj
+    // finish kevin before spilling into andrew.
+    expect(payments).toEqual([
+      { fromUserId: "yuhi", toUserId: "kevin", amountCents: 50_000 },
+      { fromUserId: "eshan", toUserId: "kevin", amountCents: 30_000 },
+      { fromUserId: "dj", toUserId: "kevin", amountCents: 10_000 },
+      { fromUserId: "dj", toUserId: "andrew", amountCents: 40_000 },
+    ]);
+  });
+
+  it("keeps every other row unchanged after settling a suggested payment", () => {
+    const original = simplifyDebts(balances, MEMBER_ORDER);
+    // Whichever single row gets settled — including dj's partial row that
+    // spans both creditors — the rest of the plan must not reshuffle.
+    for (const settled of original) {
+      const remaining = simplifyDebts(
+        settle(balances, [settled]),
+        MEMBER_ORDER,
+      );
+      expect(remaining).toEqual(original.filter((p) => p !== settled));
+    }
+  });
+
+  it("keeps the plan stable while settling rows one by one in any position", () => {
+    // Settle the plan front-to-back; after each settlement the recomputed
+    // plan is exactly the yet-unsettled tail.
+    let current = new Map(balances);
+    const original = simplifyDebts(balances, MEMBER_ORDER);
+    for (let i = 0; i < original.length; i++) {
+      current = settle(current, [original[i]]);
+      expect(simplifyDebts(current, MEMBER_ORDER)).toEqual(
+        original.slice(i + 1),
+      );
+    }
+  });
+
+  it("puts balance holders missing from memberOrder last, ordered by id", () => {
+    const withGhost = new Map([
+      ["ghost-b", -1_000],
+      ["ghost-a", -2_000],
+      ["kevin", 3_000],
+    ]);
+    expect(simplifyDebts(withGhost, ["kevin"])).toEqual([
+      { fromUserId: "ghost-a", toUserId: "kevin", amountCents: 2_000 },
+      { fromUserId: "ghost-b", toUserId: "kevin", amountCents: 1_000 },
+    ]);
+  });
+
+  it("returns no payments when everyone is settled", () => {
+    expect(simplifyDebts(new Map([["kevin", 0]]), MEMBER_ORDER)).toEqual([]);
+  });
+});
+
+describe("computeBalances", () => {
+  it("nets expenses and settlements to zero-sum balances", () => {
+    const balances = computeBalances({
+      expenses: [
+        {
+          paidById: "kevin",
+          amountCents: 9_000,
+          splits: [
+            { userId: "kevin", amountCents: 3_000 },
+            { userId: "yuhi", amountCents: 3_000 },
+            { userId: "eshan", amountCents: 3_000 },
+          ],
+        },
+      ],
+      settlements: [{ fromUserId: "yuhi", toUserId: "kevin", amountCents: 3_000 }],
+    });
+    expect(balances.get("kevin")).toBe(3_000);
+    expect(balances.get("yuhi")).toBe(0);
+    expect(balances.get("eshan")).toBe(-3_000);
+    expect([...balances.values()].reduce((a, b) => a + b, 0)).toBe(0);
   });
 });

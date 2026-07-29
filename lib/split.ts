@@ -164,25 +164,41 @@ export interface Payment {
 }
 
 /**
- * Greedy debt simplification: repeatedly match the largest debtor with the
- * largest creditor and settle the smaller of the two amounts. Produces at
- * most n−1 payments that zero every balance. (Provably minimal transaction
- * count is NP-hard; this is the standard Splitwise-style approach.)
+ * Debt simplification: walk debtors and creditors in a fixed member order,
+ * matching each debtor against creditors until their debt is exhausted.
+ * Produces at most n−1 payments that zero every balance.
+ *
+ * The fixed order (rather than largest-first) makes suggestions stable:
+ * recording a suggested payment shrinks both sides by the same amount at the
+ * same position in the walk, so every other pairing and amount is unchanged.
+ * Sorting by amount instead would re-rank after each settlement and reshuffle
+ * who pays whom mid-settling.
+ *
+ * `memberOrder` should be a stable ordering (e.g. trip join order). Balance
+ * holders missing from it — such as ex-members with expense history — go
+ * last, ordered by id.
  */
-export function simplifyDebts(balances: Map<string, number>): Payment[] {
+export function simplifyDebts(
+  balances: Map<string, number>,
+  memberOrder: string[] = [],
+): Payment[] {
   const creditors: { userId: string; cents: number }[] = [];
   const debtors: { userId: string; cents: number }[] = [];
   for (const [userId, cents] of balances) {
     if (cents > 0) creditors.push({ userId, cents });
     else if (cents < 0) debtors.push({ userId, cents: -cents });
   }
-  // Deterministic order: amount desc, then userId asc for ties.
-  const byAmount = (
+  const rank = new Map(memberOrder.map((id, i) => [id, i]));
+  const byMemberOrder = (
     a: { userId: string; cents: number },
     b: { userId: string; cents: number },
-  ) => b.cents - a.cents || (a.userId < b.userId ? -1 : 1);
-  creditors.sort(byAmount);
-  debtors.sort(byAmount);
+  ) => {
+    const ra = rank.get(a.userId) ?? Number.MAX_SAFE_INTEGER;
+    const rb = rank.get(b.userId) ?? Number.MAX_SAFE_INTEGER;
+    return ra - rb || (a.userId < b.userId ? -1 : 1);
+  };
+  creditors.sort(byMemberOrder);
+  debtors.sort(byMemberOrder);
 
   const payments: Payment[] = [];
   let ci = 0;
