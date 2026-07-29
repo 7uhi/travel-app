@@ -314,6 +314,8 @@ export async function getTripBalances(
       select: {
         currency: true,
         members: {
+          // Join order keeps simplifyDebts pairings stable across reloads.
+          orderBy: { createdAt: "asc" },
           select: {
             userId: true,
             user: { select: { name: true, image: true } },
@@ -352,7 +354,10 @@ export async function getTripBalances(
             netCents: balances.get(m.userId) ?? 0,
           }))
           .sort((a, b) => b.netCents - a.netCents),
-        suggestedPayments: simplifyDebts(balances),
+        suggestedPayments: simplifyDebts(
+          balances,
+          trip.members.map((m) => m.userId),
+        ),
       },
     };
   } catch (error) {
