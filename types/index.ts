@@ -38,7 +38,8 @@ export interface InviteLink {
 export interface Trip {
   id: string;
   title: string;
-  destination: string;
+  /** null while the group is still deciding where to go */
+  destination: string | null;
   /** ISO date string, e.g. "2026-08-01T00:00:00.000Z"; null while the group is still picking dates */
   startDate: string | null;
   /** ISO date string; null while the group is still picking dates */
@@ -105,7 +106,8 @@ export interface TripDayWithActivities extends TripDay {
 export interface TripSummary {
   id: string;
   title: string;
-  destination: string;
+  /** null while the group is still deciding where to go */
+  destination: string | null;
   /** ISO date string; null while the group is still picking dates */
   startDate: string | null;
   /** ISO date string; null while the group is still picking dates */
@@ -243,7 +245,8 @@ export interface TripBalances {
  */
 export interface TripInput {
   title: string;
-  destination: string;
+  /** Omitted while the group is still deciding where to go. */
+  destination?: string;
   /** ISO date string (YYYY-MM-DD or full ISO) */
   startDate?: string;
   /** ISO date string */
@@ -378,3 +381,113 @@ export interface ActivityIdeaInput {
   link?: string | null;
   estimatedCost?: number | null;
 }
+
+/* ------------------------------------------------------------------ */
+/* Travel preferences — durable per-user taste + per-trip answers       */
+/* ------------------------------------------------------------------ */
+
+export type TravelPace = "RELAXED" | "BALANCED" | "PACKED";
+export type BudgetTier = "SHOESTRING" | "MODERATE" | "COMFORT" | "LUXURY";
+export type DayRhythm = "EARLY_BIRD" | "FLEXIBLE" | "NIGHT_OWL";
+export type LodgingStyle =
+  | "HOSTEL"
+  | "RENTAL"
+  | "HOTEL"
+  | "BOUTIQUE"
+  | "CAMPING";
+
+export type InterestTag =
+  | "FOOD"
+  | "NIGHTLIFE"
+  | "ART_MUSEUMS"
+  | "HISTORY"
+  | "NATURE"
+  | "HIKING"
+  | "BEACH"
+  | "WATER_SPORTS"
+  | "ADVENTURE"
+  | "SHOPPING"
+  | "WELLNESS"
+  | "LOCAL_LIFE";
+
+/** ANYWHERE is an explicit "don't care" — not the same as an unanswered null. */
+export type TravelRegion =
+  | "ANYWHERE"
+  | "DOMESTIC"
+  | "EUROPE"
+  | "ASIA"
+  | "AFRICA"
+  | "NORTH_AMERICA"
+  | "SOUTH_AMERICA"
+  | "OCEANIA";
+
+/** NO_PREFERENCE is an explicit "don't care" — not the same as unanswered. */
+export type Climate = "WARM" | "MILD" | "COLD" | "NO_PREFERENCE";
+
+/** A signed interest weight, -2 (avoid) … +2 (love). */
+export interface InterestWeight {
+  tag: InterestTag;
+  weight: number;
+}
+
+/** One member's durable cross-trip profile, after serialization. */
+export interface TravelProfileSummary {
+  userId: string;
+  pace: TravelPace | null;
+  budgetTier: BudgetTier | null;
+  dayRhythm: DayRhythm | null;
+  lodgingStyle: LodgingStyle | null;
+  /** Hard filters. Unioned across the group, never averaged. */
+  dietaryNotes: string | null;
+  accessibilityNotes: string | null;
+  /** Sorted by tag; weight-0 tags are omitted. */
+  interests: InterestWeight[];
+  /** ISO datetime of the last save. */
+  answeredAt: string;
+}
+
+/**
+ * One member's answers for a single trip, after serialization. Fields that
+ * also exist on TravelProfileSummary are overrides: null means "same as usual".
+ * Resolve the pair with resolveEffectiveProfile rather than reading one alone.
+ */
+export interface TripPreferenceSummary {
+  userId: string;
+  /** Overrides the durable budgetTier for this trip; null = same as usual. */
+  budgetComfort: BudgetTier | null;
+  /**
+   * Absolute per-trip interest weights. When non-empty they replace the
+   * durable set for this trip; empty means the durable set applies.
+   */
+  interests: InterestWeight[];
+  mustDo: string | null;
+  dealBreakers: string | null;
+  /** Only collected while the trip's destination is undecided. */
+  preferredRegion: TravelRegion | null;
+  preferredClimate: Climate | null;
+  maxTravelHours: number | null;
+  /** ISO datetime of the last save. */
+  answeredAt: string;
+}
+
+/** One row per trip member; profile/trip are null when they haven't answered. */
+export interface MemberPreferences {
+  userId: string;
+  name: string | null;
+  image: string | null;
+  role: TripRole;
+  profile: TravelProfileSummary | null;
+  trip: TripPreferenceSummary | null;
+}
+
+/** The caller's own answers, used to prefill the deck. */
+export interface MyPreferences {
+  profile: TravelProfileSummary | null;
+  trip: TripPreferenceSummary | null;
+}
+
+/**
+ * A finished deck run, keyed by question id. Single-select, scale and text
+ * answers are strings; multi-select answers are string arrays.
+ */
+export type PreferenceAnswers = Record<string, string | string[]>;

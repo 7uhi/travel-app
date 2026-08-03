@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { getTripAvailability } from "@/actions/availability";
 import { getTripSpentCents } from "@/actions/expense";
+import { getMyPreferenceStatus } from "@/actions/preferences";
 import { getTripById } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
@@ -35,6 +36,20 @@ export default async function TripPage({
     if (availabilityResult.success) availability = availabilityResult.data;
   }
 
+  /*
+   * The nudge only matters until the viewer has answered, and it points at
+   * whichever deck is missing: the account-level profile comes first because
+   * the trip deck's defaults are drawn from it.
+   */
+  const statusRes = await getMyPreferenceStatus(id);
+  const preferencesNudge = !statusRes.success
+    ? null
+    : !statusRes.data.hasProfile
+      ? "profile"
+      : !statusRes.data.hasTripPreference
+        ? "trip"
+        : null;
+
   return (
     <TripDashboard
       trip={result.data}
@@ -42,6 +57,7 @@ export default async function TripPage({
       availability={availability}
       currentUserId={currentUserId}
       spentCents={spentRes.success ? spentRes.data : null}
+      preferencesNudge={preferencesNudge}
     />
   );
 }

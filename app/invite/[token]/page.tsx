@@ -22,7 +22,14 @@ export default async function InvitePage({
   const result = await acceptInvite(token);
 
   if (result.success) {
-    redirect(`/trips/${result.data.tripId}`);
+    // A brand-new member arrives with no context, so the deck is the natural
+    // first screen; someone re-clicking a link they already used isn't asked
+    // again. Every question is skippable either way.
+    redirect(
+      result.data.alreadyMember
+        ? `/trips/${result.data.tripId}`
+        : `/trips/${result.data.tripId}/preferences/onboarding`,
+    );
   }
 
   return (

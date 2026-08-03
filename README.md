@@ -60,18 +60,23 @@ Actions in `actions/`, and the only API route is the Auth.js handler.
 auth.ts / auth.config.ts / middleware.ts   Auth wiring (see below)
 prisma/schema.prisma                       Data model + migrations
 actions/                                   Server actions — the "backend"
-  trip.ts      trips, days, activities
-  expense.ts   expenses, splits, settlements, balances
-  invite.ts    invite links
+  trip.ts        trips, days, activities
+  expense.ts     expenses, splits, settlements, balances
+  invite.ts      invite links
+  preferences.ts travel profiles + per-trip preference answers
 lib/
   split.ts     pure expense-splitting math (integer cents)
+  preferences.ts       pure group-consensus math + LLM prompt context
+  preference-questions.ts  the question banks, as code data
   prisma.ts    PrismaClient singleton
   session.ts   currentUserId() helper
   action-result.ts  ActionResult<T> union returned by every action
 types/index.ts                             JSON-safe types crossing to the client
 app/
   /                landing + Google sign-in
+  /onboarding      the account-level travel profile deck (first sign-in)
   /trips           your trips → /trips/[id] itinerary → /trips/[id]/expenses
+                   → /trips/[id]/preferences (+ /onboarding, the trip deck)
   /invite/[token]  accept an invite, then redirect to the trip
   /preview         demo dashboard (no DB required)
 components/                                UI (server + client components)
@@ -94,6 +99,33 @@ components/                                UI (server + client components)
 - **Expenses.** `Expense` → `ExpenseSplit` (one share per participant) plus
   `Settlement` for recorded repayments. All money is stored as **integer
   cents**; each trip has a single currency.
+- **Preferences, in two layers, asked at two moments.** `TravelProfile` is one
+  row per *user* — durable taste (pace, budget tier, rhythm, lodging) that
+  outlives any single trip. It's collected by the account-level deck at
+  `/onboarding` just after first sign-in (skippable; the trip banner nudges
+  anyone who skips). `TripPreference` is one row per *(user, trip)*, collected
+  when they create or join a trip. Interest weights hang off each layer as
+  child rows scored −2…+2 (`TravelInterest`, `TripInterest`), so they're
+  SQL-aggregatable and a future swipe UI can write the same shape.
+- **Trip answers are overrides, never deltas.** A trip question that also
+  exists on the profile opens pre-filled with the member's usual answer —
+  continuing accepts it, changing it applies to that trip only. Nothing in the
+  trip deck ever writes back to the durable profile, which is what keeps
+  "museums in Rome" from permanently rewriting someone's general taste and what
+  makes an answer readable back out again. Always read the pair through
+  `resolveEffectiveProfile`; either layer alone is the wrong answer whenever a
+  member has said this trip is different.
+- Which trip bank a member gets depends on whether `Trip.destination` is set
+  yet — nullable for exactly that reason, mirroring the nullable `startDate`
+  used by the date poll. The banks live in code (`lib/preference-questions.ts`).
+- **Hard constraints are unioned, not averaged.** Dietary and accessibility
+  notes are free text and every one of them is carried into the group view and
+  the prompt context. Budget and travel-time take the *strictest* answer, and
+  region/climate *intersect* — they're constraints, not tastes. Only interest
+  weights are averaged, and even then ranked by `(mean + min) / 2` so one hard
+  "no" outweighs several mild "yes"es. Note these notes sit on the user-level
+  profile, so they're visible to every trip that member belongs to; the deck
+  says so at the point of entry.
 
 ### Conventions
 
@@ -107,6 +139,11 @@ components/                                UI (server + client components)
 - **Money math is pure**: `lib/split.ts` has no I/O. Splits always sum
   exactly to the total (largest-remainder rounding), and
   `simplifyDebts` produces at most n−1 suggested payments.
+- **Group consensus is pure too**: `lib/preferences.ts` has no I/O and is
+  deterministic regardless of member order. It's the single seam any future AI
+  feature should call — `profileToPromptContext` renders the group as one
+  stable text block (no `Intl`, no `Date.now()`) so every feature describes the
+  group identically instead of re-deriving it.
 
 ### Auth architecture
 

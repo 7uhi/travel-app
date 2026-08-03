@@ -9,7 +9,12 @@ import type { TripRole, TripWithDays } from "@/types";
 
 const MS_PER_DAY = 86_400_000;
 
-export type TripTab = "itinerary" | "ideas" | "expenses" | "packing";
+export type TripTab =
+  | "itinerary"
+  | "ideas"
+  | "expenses"
+  | "packing"
+  | "preferences";
 
 /**
  * Shared top section of every trip page: breadcrumb, hero, stat cards, and
@@ -40,6 +45,9 @@ export function TripHeader({
     trip.days.length > 0
       ? Math.round((daysWithPlans / trip.days.length) * 100)
       : 0;
+
+  // "Lisbon, Portugal" → "Lisbon"; null while the destination is undecided.
+  const destinationShort = trip.destination?.split(",")[0].trim() ?? null;
 
   const status = tripStatus(trip.startDate, trip.endDate);
   const scheduled = status !== "planning";
@@ -129,7 +137,7 @@ export function TripHeader({
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/90">
               <span className="flex items-center gap-1.5">
                 <MapPin size={15} className="text-white/70" />
-                {trip.destination}
+                {trip.destination ?? "Destination TBD"}
               </span>
               <span className="flex items-center gap-1.5">
                 <CalendarDays size={15} className="text-white/70" />
@@ -187,7 +195,7 @@ export function TripHeader({
               <p className="font-display text-4xl">
                 {daysToGo}
                 <span className="ml-2 font-sans text-sm font-normal text-stone-500">
-                  days to {trip.destination.split(",")[0]}
+                  days to {destinationShort ?? "your trip"}
                 </span>
               </p>
               <p className="mt-2 text-sm text-stone-500">
@@ -198,7 +206,7 @@ export function TripHeader({
             <>
               <p className="font-display text-4xl">Day {currentDayNumber}</p>
               <p className="mt-2 text-sm text-stone-500">
-                of {trip.days.length} — enjoy {trip.destination.split(",")[0]}!
+                of {trip.days.length} — enjoy {destinationShort ?? "the trip"}!
               </p>
             </>
           ) : (
@@ -276,7 +284,7 @@ export function TripHeader({
       </section>
 
       {showTabs && (
-        <nav className="mt-8 flex gap-2" aria-label="Trip sections">
+        <nav className="mt-8 flex flex-wrap gap-2" aria-label="Trip sections">
           <TabLink href={`/trips/${trip.id}`} active={activeTab === "itinerary"}>
             Itinerary
           </TabLink>
@@ -297,6 +305,12 @@ export function TripHeader({
             active={activeTab === "packing"}
           >
             Packing
+          </TabLink>
+          <TabLink
+            href={`/trips/${trip.id}/preferences`}
+            active={activeTab === "preferences"}
+          >
+            Preferences
           </TabLink>
         </nav>
       )}

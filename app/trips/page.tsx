@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { CalendarDays, MapPin, Users } from "lucide-react";
 
+import { getMyProfile } from "@/actions/preferences";
 import { getMyTrips } from "@/actions/trip";
+import { PROFILE_ONBOARDING_SEEN } from "@/lib/onboarding";
 import { NewTripButton } from "@/components/NewTripButton";
 import { formatDateRange } from "@/lib/format";
 import { tripStatus, type TripStatus } from "@/lib/trip-status";
@@ -22,6 +26,17 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 };
 
 export default async function TripsPage() {
+  // First sign-in lands here; send them to the profile deck once, then never
+  // again whether they finished it or skipped.
+  const [profileRes, jar] = await Promise.all([getMyProfile(), cookies()]);
+  if (
+    profileRes.success &&
+    profileRes.data === null &&
+    !jar.has(PROFILE_ONBOARDING_SEEN)
+  ) {
+    redirect("/onboarding?next=/trips");
+  }
+
   const result = await getMyTrips();
 
   if (!result.success) {
@@ -80,7 +95,7 @@ function TripCard({ trip }: { trip: TripSummary }) {
           <div className="mt-2 space-y-1 text-xs text-stone-500">
             <p className="flex items-center gap-1.5">
               <MapPin size={12} className="shrink-0 text-stone-400" />
-              {trip.destination}
+              {trip.destination ?? "Destination TBD"}
             </p>
             <p className="flex items-center gap-1.5">
               <CalendarDays size={12} className="shrink-0 text-stone-400" />
