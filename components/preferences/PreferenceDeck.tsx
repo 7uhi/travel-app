@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, List } from "lucide-react";
 
 import {
   dismissProfileOnboarding,
@@ -114,6 +114,13 @@ export function PreferenceDeck({
   const question = questions[step];
   const onReview = step === questions.length;
 
+  // The review step is the last "step", so it gets a dot of its own.
+  const stepLabels = [...questions.map((q) => q.prompt), "All your answers"];
+  const stepAnswered = [
+    ...questions.map((q) => hasAnswer(answers[q.id])),
+    false,
+  ];
+
   function record(id: string, value: string | string[]) {
     setAnswers((prev) => ({ ...prev, [id]: value }));
   }
@@ -166,15 +173,34 @@ export function PreferenceDeck({
 
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col">
-      <div className="flex items-center justify-between gap-4">
-        <ProgressDots total={questions.length + 1} current={step} />
-        <button
-          type="button"
-          onClick={leave}
-          className="text-xs font-medium text-stone-500 transition-colors hover:text-ink"
-        >
-          {mode === "profile" ? "Skip for now" : "Finish later"}
-        </button>
+      {/* Both banks fit on one line at 375px today (9 dots at most), but the
+          row is a question count away from not doing — so it wraps. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <ProgressDots
+          labels={stepLabels}
+          current={step}
+          answered={stepAnswered}
+          onJump={setStep}
+        />
+        <div className="flex items-center gap-4">
+          {!onReview && (
+            <button
+              type="button"
+              onClick={() => setStep(questions.length)}
+              className="flex items-center gap-1 text-xs font-medium text-stone-500 transition-colors hover:text-ink"
+            >
+              <List size={13} />
+              See all answers
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={leave}
+            className="text-xs font-medium text-stone-500 transition-colors hover:text-ink"
+          >
+            {mode === "profile" ? "Skip for now" : "Finish later"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-8 flex-1">
@@ -267,6 +293,19 @@ export function PreferenceDeck({
       )}
     </div>
   );
+}
+
+/**
+ * Whether a step counts as answered, for the progress dots and the review
+ * tally. Stricter than `id in answers`: emptying a text box or deselecting
+ * every tile leaves a value behind that saves as nothing, and a dot that
+ * claims otherwise would send someone hunting for a gap that isn't there.
+ */
+function hasAnswer(
+  value: string | string[] | undefined,
+): value is string | string[] {
+  if (value === undefined) return false;
+  return Array.isArray(value) ? value.length > 0 : value.trim() !== "";
 }
 
 /** Multi-select and text steps need an explicit Continue; tiles auto-advance. */
@@ -388,17 +427,20 @@ function ReviewStep({
   /** True when the member already had answers before this run. */
   returning: boolean;
 }) {
-  const answered = questions.filter((q) => q.id in answers);
+  const answered = questions.filter((q) => hasAnswer(answers[q.id]));
+  // Reachable at any point now, not just by walking to the end — so the copy
+  // can't assume the run is over.
+  const complete = answered.length === questions.length;
 
   return (
     <div>
       <h1 className="font-display text-3xl leading-tight">
-        {returning ? "Your answers" : "That's everything."}
+        {complete && !returning ? "That's everything." : "Your answers"}
       </h1>
       <p className="mt-2 text-sm leading-relaxed text-stone-500">
-        {returning
+        {complete
           ? "Tap anything to change it."
-          : `${answered.length} of ${questions.length} answered. Skipped questions stay blank — you can come back to them any time.`}
+          : `${answered.length} of ${questions.length} answered. Tap any question to fill it in or change it — blanks stay blank.`}
       </p>
 
       <ul className="mt-6 space-y-2">
@@ -410,7 +452,15 @@ function ReviewStep({
               className="flex w-full items-start justify-between gap-4 rounded-xl border border-stone-200 bg-white px-4 py-3 text-left transition-colors hover:border-pine/40"
             >
               <span className="text-sm text-stone-500">{question.prompt}</span>
-              <span className="shrink-0 text-sm font-medium text-ink">
+              {/* Gaps read as gaps: a dimmed "Skipped" doesn't carry the same
+                  weight as a real answer when scanning the list. */}
+              <span
+                className={`shrink-0 text-sm font-medium ${
+                  hasAnswer(answers[question.id])
+                    ? "text-ink"
+                    : "text-stone-400"
+                }`}
+              >
                 {summarize(question, answers[question.id])}
               </span>
             </button>
@@ -426,10 +476,9 @@ function summarize(
   question: PreferenceQuestion,
   answer: string | string[] | undefined,
 ): string {
-  if (answer === undefined) return "Skipped";
+  if (!hasAnswer(answer)) return "Skipped";
 
   if (Array.isArray(answer)) {
-    if (answer.length === 0) return "None";
     const isInterests =
       question.target.kind === "interests" ||
       question.target.kind === "tripInterests";
