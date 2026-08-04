@@ -10,6 +10,7 @@ import { TripHeader } from "@/components/TripHeader";
 import { ConflictList } from "@/components/preferences/ConflictList";
 import { GroupConsensusPanel } from "@/components/preferences/GroupConsensusPanel";
 import { MemberPreferenceCard } from "@/components/preferences/MemberPreferenceCard";
+import { ResetTripPreferencesButton } from "@/components/preferences/ResetTripPreferencesButton";
 import {
   aggregateGroupProfile,
   aggregateTripPreferences,
@@ -73,21 +74,36 @@ export default async function TripPreferencesPage({
       <section className="mt-10">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-2xl">Preferences</h2>
-          <Link
-            href={`/trips/${trip.id}/preferences/onboarding`}
-            className="rounded-full bg-pine px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-pine-dark"
-          >
-            {mine?.profile ? "Edit my answers" : "Answer your preferences"}
-          </Link>
+          {/* Everything the viewer can change about themselves here: this
+              trip's answers, the profile they're inherited from, and the way
+              back to inheriting them again. */}
+          <div className="flex flex-wrap items-center gap-1">
+            {mine?.trip && <ResetTripPreferencesButton tripId={trip.id} />}
+            <Link
+              href={`/onboarding?next=/trips/${trip.id}/preferences`}
+              className="rounded-full px-3 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
+            >
+              Travel profile
+            </Link>
+            <Link
+              href={`/trips/${trip.id}/preferences/onboarding`}
+              className="rounded-full bg-pine px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-pine-dark"
+            >
+              {mine?.trip ? "Edit my answers" : "Answer for this trip"}
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* items-start: the aside is far taller than a member card, and
+              stretched cards are mostly empty white. */}
+          <div className="grid items-start gap-4 sm:grid-cols-2">
             {members.map((member) => (
               <MemberPreferenceCard
                 key={member.userId}
                 member={member}
                 isYou={member.userId === currentUserId}
+                tripId={trip.id}
               />
             ))}
           </div>

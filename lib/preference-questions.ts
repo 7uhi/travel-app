@@ -1,4 +1,11 @@
-import type { InterestTag, TravelProfileSummary } from "@/types";
+import type {
+  BudgetTier,
+  DayRhythm,
+  InterestTag,
+  LodgingStyle,
+  TravelPace,
+  TravelProfileSummary,
+} from "@/types";
 
 /**
  * The preference question banks, shipped as code rather than database rows so
@@ -133,6 +140,39 @@ export const INTEREST_EMOJI: Record<InterestTag, string> = {
   SHOPPING: "🛍️",
   WELLNESS: "💆",
   LOCAL_LIFE: "🚶",
+};
+
+/*
+ * Short labels for the enum-valued profile fields, for anywhere an answer is
+ * read back rather than asked: the member cards on the trip tab and the
+ * profile summary on /trips. They live beside the question banks so a tile's
+ * wording and the label it reads back as can't drift apart.
+ */
+export const PACE_LABELS: Record<TravelPace, string> = {
+  RELAXED: "Slow and easy",
+  BALANCED: "A bit of both",
+  PACKED: "See everything",
+};
+
+export const BUDGET_LABELS: Record<BudgetTier, string> = {
+  SHOESTRING: "Shoestring",
+  MODERATE: "Moderate",
+  COMFORT: "Comfortable",
+  LUXURY: "Splurge",
+};
+
+export const RHYTHM_LABELS: Record<DayRhythm, string> = {
+  EARLY_BIRD: "Early bird",
+  FLEXIBLE: "Flexible hours",
+  NIGHT_OWL: "Night owl",
+};
+
+export const LODGING_LABELS: Record<LodgingStyle, string> = {
+  HOSTEL: "Hostels",
+  RENTAL: "Rentals",
+  HOTEL: "Hotels",
+  BOUTIQUE: "Boutique stays",
+  CAMPING: "Camping",
 };
 
 /** Every interest tag as a tile, in INTEREST_TAGS order. */

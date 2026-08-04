@@ -7,6 +7,7 @@ import { getMyProfile } from "@/actions/preferences";
 import { getMyTrips } from "@/actions/trip";
 import { PROFILE_ONBOARDING_SEEN } from "@/lib/onboarding";
 import { NewTripButton } from "@/components/NewTripButton";
+import { TravelProfileCard } from "@/components/preferences/TravelProfileCard";
 import { formatDateRange } from "@/lib/format";
 import { tripStatus, type TripStatus } from "@/lib/trip-status";
 import type { TripSummary } from "@/types";
@@ -56,6 +57,10 @@ export default async function TripsPage() {
         <h1 className="font-display text-4xl tracking-tight">Your trips</h1>
         <NewTripButton />
       </div>
+
+      {/* The only lasting way back into the profile deck: the sign-up redirect
+          fires once and the trip banner disappears as soon as it's answered. */}
+      {profileRes.success && <TravelProfileCard profile={profileRes.data} />}
 
       {trips.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-12 text-center">

@@ -1,40 +1,32 @@
+import Link from "next/link";
+
 import { Avatar } from "@/components/Avatar";
 import { resolveEffectiveProfile } from "@/lib/preferences";
 import {
+  BUDGET_LABELS,
   INTEREST_EMOJI,
   INTEREST_LABELS,
+  PACE_LABELS,
+  RHYTHM_LABELS,
 } from "@/lib/preference-questions";
 import type { MemberPreferences } from "@/types";
-
-const PACE_LABELS = {
-  RELAXED: "Slow and easy",
-  BALANCED: "A bit of both",
-  PACKED: "Sees everything",
-} as const;
-
-const BUDGET_LABELS = {
-  SHOESTRING: "Shoestring",
-  MODERATE: "Moderate",
-  COMFORT: "Comfortable",
-  LUXURY: "Splurge",
-} as const;
-
-const RHYTHM_LABELS = {
-  EARLY_BIRD: "Early bird",
-  FLEXIBLE: "Flexible hours",
-  NIGHT_OWL: "Night owl",
-} as const;
 
 /**
  * One member's answers. Hard constraints are labelled as group-visible because
  * they live on the durable profile and are shared with everyone on the trip.
+ *
+ * Your own card carries an edit link: it's where you go to check what you said,
+ * so it's where you reach for when you want to change it.
  */
 export function MemberPreferenceCard({
   member,
   isYou,
+  tripId,
 }: {
   member: MemberPreferences;
   isYou: boolean;
+  /** Only needed to build the edit link on the viewer's own card. */
+  tripId: string;
 }) {
   const { trip } = member;
   const status = member.profile
@@ -75,6 +67,14 @@ export function MemberPreferenceCard({
             )}
           </p>
         </div>
+        {isYou && (
+          <Link
+            href={`/trips/${tripId}/preferences/onboarding`}
+            className="shrink-0 rounded-full border border-stone-200 px-3 py-1 text-xs font-medium text-stone-600 transition-colors hover:border-pine/40 hover:text-pine"
+          >
+            {trip ? "Edit" : "Answer"}
+          </Link>
+        )}
       </div>
 
       {profile && (
