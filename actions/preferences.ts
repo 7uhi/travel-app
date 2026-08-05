@@ -11,32 +11,19 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
 import { fail, type ActionResult } from "@/lib/action-result";
-import {
-  NUMERIC_TRIP_FIELDS,
-  PROFILE_QUESTIONS,
-  tripDeckFor,
-  type PreferenceQuestion,
-} from "@/lib/preference-questions";
+import { parseAnswers } from "@/lib/preference-answers";
+import { PROFILE_QUESTIONS, tripDeckFor } from "@/lib/preference-questions";
 import {
   PROFILE_ONBOARDING_SEEN,
   PROFILE_ONBOARDING_SEEN_MAX_AGE,
 } from "@/lib/onboarding";
-import { applyInterestAnswer } from "@/lib/preferences";
 import { prisma } from "@/lib/prisma";
 import { currentUserId } from "@/lib/session";
 import type {
-  BudgetTier,
-  Climate,
-  DayRhythm,
-  InterestTag,
-  InterestWeight,
-  LodgingStyle,
   MemberPreferences,
   MyPreferences,
   PreferenceAnswers,
-  TravelPace,
   TravelProfileSummary,
-  TravelRegion,
   TripPreferenceSummary,
 } from "@/types";
 
@@ -52,8 +39,6 @@ import type {
  * address someone else's row. Do not add a userId parameter to these actions.
  */
 
-/** Free-text answers longer than this are almost certainly a paste mistake. */
-const MAX_NOTE_LENGTH = 300;
 /** Runaway-payload guard on a submitted deck run. */
 const MAX_ANSWER_KEYS = 40;
 
@@ -242,9 +227,7 @@ export async function saveMyProfile(
     return fail("That's more answers than the deck has questions.");
   }
 
-  // Interests are absolute, so a run starts from a clean set rather than
-  // composing onto whatever was stored before.
-  const parsed = parseAnswers(PROFILE_QUESTIONS, answers, []);
+  const parsed = parseAnswers(PROFILE_QUESTIONS, answers);
   if ("error" in parsed) return fail(parsed.error);
 
   try {
@@ -341,7 +324,7 @@ export async function saveMyTripPreferences(
 
     // Re-derive the deck server-side: a client can only answer questions the
     // trip actually asks.
-    const parsed = parseAnswers(tripDeckFor(trip.destination), answers, []);
+    const parsed = parseAnswers(tripDeckFor(trip.destination), answers);
     if ("error" in parsed) return fail(parsed.error);
 
     const answeredAt = await prisma.$transaction(async (tx) => {
@@ -420,137 +403,6 @@ export async function clearMyTripPreferences(
 /* Helpers (module-private: "use server" files may only export          */
 /* async functions and types)                                           */
 /* ------------------------------------------------------------------ */
-
-/*
- * Prisma-ready field values. Every enum-valued question offers exactly its
- * field's enum members as options, so a value that passed the option check is
- * a member of that enum — but the option list is declared as plain strings, so
- * TypeScript can't see it. `assign` below is where that one runtime-guaranteed
- * invariant is asserted, so the rest of the file stays properly typed.
- */
-type ProfileFieldValues = {
-  pace?: TravelPace | null;
-  budgetTier?: BudgetTier | null;
-  dayRhythm?: DayRhythm | null;
-  lodgingStyle?: LodgingStyle | null;
-  dietaryNotes?: string | null;
-  accessibilityNotes?: string | null;
-};
-
-type TripFieldValues = {
-  budgetComfort?: BudgetTier | null;
-  mustDo?: string | null;
-  dealBreakers?: string | null;
-  preferredRegion?: TravelRegion | null;
-  preferredClimate?: Climate | null;
-  maxTravelHours?: number | null;
-};
-
-type ParsedAnswers = {
-  profileFields: ProfileFieldValues;
-  tripFields: TripFieldValues;
-  /** Durable weights, written by the account deck only. */
-  interests: InterestWeight[];
-  /** Per-trip overrides, written by the trip deck only. */
-  tripInterests: InterestWeight[];
-};
-
-/** Writes a validated answer into a field bag. See the note above. */
-function assign<T extends object, K extends string>(
-  fields: T,
-  field: K,
-  value: string | number | null,
-): void {
-  (fields as Record<string, string | number | null>)[field] = value;
-}
-
-/**
- * Validates a deck run against the questions the trip actually asks and folds
- * it into database-ready values.
- *
- * An unknown question id is ignored rather than rejected: a client running a
- * stale bundle after the banks change shouldn't lose the user's whole run. A
- * known id with the wrong value type is a real client bug, so it fails loudly.
- */
-function parseAnswers(
-  deck: readonly PreferenceQuestion[],
-  answers: PreferenceAnswers,
-  currentInterests: InterestWeight[],
-): ParsedAnswers | { error: string } {
-  const parsed: ParsedAnswers = {
-    profileFields: {},
-    tripFields: {},
-    interests: currentInterests,
-    tripInterests: [],
-  };
-
-  for (const question of deck) {
-    if (!(question.id in answers)) continue;
-    const answer = answers[question.id];
-
-    if (question.kind === "multi-select") {
-      if (!Array.isArray(answer)) {
-        return { error: `Invalid answer for "${question.prompt}".` };
-      }
-      const allowed = new Set(question.options?.map((o) => o.value) ?? []);
-      const tags = [...new Set(answer)];
-      if (tags.some((tag) => !allowed.has(tag))) {
-        return { error: `Invalid answer for "${question.prompt}".` };
-      }
-      // Durable and per-trip weights are kept strictly apart: the account deck
-      // only ever writes the former, the trip deck only ever the latter.
-      if (question.target.kind === "interests") {
-        parsed.interests = applyInterestAnswer(parsed.interests, {
-          tags: tags as InterestTag[],
-          weight: question.target.weight,
-        });
-      } else if (question.target.kind === "tripInterests") {
-        parsed.tripInterests = applyInterestAnswer(parsed.tripInterests, {
-          tags: tags as InterestTag[],
-          weight: question.target.weight,
-        });
-      }
-      continue;
-    }
-
-    if (typeof answer !== "string") {
-      return { error: `Invalid answer for "${question.prompt}".` };
-    }
-
-    if (question.kind === "text") {
-      const note = answer.trim() || null;
-      const max = question.maxLength ?? MAX_NOTE_LENGTH;
-      if (note && note.length > max) {
-        return { error: `Answers must be ${max} characters or fewer.` };
-      }
-      if (question.target.kind === "profileField") {
-        assign(parsed.profileFields, question.target.field, note);
-      } else if (question.target.kind === "tripField") {
-        assign(parsed.tripFields, question.target.field, note);
-      }
-      continue;
-    }
-
-    // single-select: the value must be one the question offers.
-    const allowed = question.options?.map((o) => o.value) ?? [];
-    if (!allowed.includes(answer)) {
-      return { error: `Invalid answer for "${question.prompt}".` };
-    }
-
-    if (question.target.kind === "profileField") {
-      assign(parsed.profileFields, question.target.field, answer);
-    } else if (question.target.kind === "tripField") {
-      const field = question.target.field;
-      assign(
-        parsed.tripFields,
-        field,
-        NUMERIC_TRIP_FIELDS.includes(field) ? Number(answer) : answer,
-      );
-    }
-  }
-
-  return parsed;
-}
 
 /** Checks the caller is a member of a trip, any role. Non-members and missing
  * trips get the same answer: no existence leaks. */
