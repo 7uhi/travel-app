@@ -46,11 +46,13 @@ export default async function TripPreferencesPage({
   /*
    * Aggregation runs on the server: no member data or math ships to the client.
    * Consensus is computed from *effective* profiles — a member who said this
-   * trip is different should count as what they said here, not as their usual.
+   * trip is different should count as what they said here, not as their usual,
+   * and a member who only answered the trip deck (the normal state after
+   * joining by invite link) still counts as what they said for this trip.
    */
   const effective = members
-    .filter((m) => m.profile !== null)
-    .map((m) => resolveEffectiveProfile(m.profile!, m.trip));
+    .map((m) => resolveEffectiveProfile(m.profile, m.trip))
+    .filter((p) => p !== null);
   const group = aggregateGroupProfile(effective);
   const groupTrip = aggregateTripPreferences(
     members.map((m) => m.trip).filter((t) => t !== null),
