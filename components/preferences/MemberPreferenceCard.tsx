@@ -33,14 +33,18 @@ export function MemberPreferenceCard({
     ? trip
       ? "Answered"
       : "Profile only"
-    : "Not answered";
+    : trip
+      ? "This trip only"
+      : "Not answered";
 
-  // Show what applies on this trip, not the member's usual settings.
-  const profile = member.profile
-    ? resolveEffectiveProfile(member.profile, trip)
-    : null;
+  // Show what applies on this trip, not the member's usual settings. A member
+  // who skipped the account deck still shows what they said for this trip.
+  const profile = resolveEffectiveProfile(member.profile, trip);
+  // "Set for this trip" only means something against a usual to differ from.
   const overridden = Boolean(
-    trip && (trip.budgetComfort !== null || trip.interests.length > 0),
+    member.profile &&
+      trip &&
+      (trip.budgetComfort !== null || trip.interests.length > 0),
   );
 
   const loved = (profile?.interests ?? [])

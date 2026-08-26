@@ -163,6 +163,27 @@ describe("resolveEffectiveProfile", () => {
     expect(effective.pace).toBe("RELAXED");
     expect(effective.dietaryNotes).toBe("vegetarian");
   });
+
+  it("builds an effective profile from trip answers alone", () => {
+    // The default invite path: straight into the trip deck, no durable
+    // profile. The member still counts as what they said for this trip.
+    const effective = resolveEffectiveProfile(
+      null,
+      tripPref("a", {
+        budgetComfort: "SHOESTRING",
+        interests: [w("HIKING", 2)],
+      }),
+    );
+    expect(effective.userId).toBe("a");
+    expect(effective.budgetTier).toBe("SHOESTRING");
+    expect(effective.interests).toEqual([w("HIKING", 2)]);
+    expect(effective.pace).toBeNull();
+    expect(effective.dietaryNotes).toBeNull();
+  });
+
+  it("returns null only when the member answered nothing at all", () => {
+    expect(resolveEffectiveProfile(null, null)).toBeNull();
+  });
 });
 
 describe("aggregateGroupProfile", () => {
@@ -433,6 +454,20 @@ describe("profileToPromptContext", () => {
     expect(block).not.toContain("HARD CONSTRAINTS");
     expect(block).not.toContain("THIS TRIP");
     expect(block).not.toContain("CONFLICTS");
+  });
+
+  it("counts a member who only answered the trip deck", () => {
+    // Their trip-level budget must reach the group ceiling even though they
+    // have no durable profile — the ceiling exists to protect exactly them.
+    const block = profileToPromptContext({
+      ...baseInput,
+      profiles: [profile("a", { budgetTier: "LUXURY" })],
+      tripPreferences: [tripPref("b", { budgetComfort: "SHOESTRING" })],
+    });
+    expect(block).toContain("GROUP (2 answered)");
+    expect(block).toContain(
+      "Budget ceiling: SHOESTRING (lowest of 2 answers)",
+    );
   });
 
   it("always includes hard constraints, even for one member", () => {

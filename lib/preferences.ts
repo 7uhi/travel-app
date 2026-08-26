@@ -75,6 +75,11 @@ export function applyInterestAnswer(
  * reading either layer alone gives the wrong answer whenever a member has said
  * "this trip is different".
  *
+ * Either layer may be missing. A member with trip answers but no durable
+ * profile — the normal state for someone who followed an invite link straight
+ * into the trip deck — counts as what they said here, laid over an empty
+ * profile. Null comes back only when the member has answered nothing at all.
+ *
  * A null override means "same as usual". Interests replace wholesale rather
  * than merging per tag, because an absent tag is otherwise ambiguous — it
  * can't mean both "not interested" and "defer to my usual".
@@ -82,13 +87,41 @@ export function applyInterestAnswer(
 export function resolveEffectiveProfile(
   profile: TravelProfileSummary,
   trip: TripPreferenceSummary | null,
-): TravelProfileSummary {
+): TravelProfileSummary;
+export function resolveEffectiveProfile(
+  profile: TravelProfileSummary | null,
+  trip: TripPreferenceSummary,
+): TravelProfileSummary;
+export function resolveEffectiveProfile(
+  profile: TravelProfileSummary | null,
+  trip: TripPreferenceSummary | null,
+): TravelProfileSummary | null;
+export function resolveEffectiveProfile(
+  profile: TravelProfileSummary | null,
+  trip: TripPreferenceSummary | null,
+): TravelProfileSummary | null {
   if (!trip) return profile;
+  const base = profile ?? emptyProfileFor(trip);
 
   return {
-    ...profile,
-    budgetTier: trip.budgetComfort ?? profile.budgetTier,
-    interests: trip.interests.length > 0 ? trip.interests : profile.interests,
+    ...base,
+    budgetTier: trip.budgetComfort ?? base.budgetTier,
+    interests: trip.interests.length > 0 ? trip.interests : base.interests,
+  };
+}
+
+/** What a member who never ran the account deck implicitly has: no answers. */
+function emptyProfileFor(trip: TripPreferenceSummary): TravelProfileSummary {
+  return {
+    userId: trip.userId,
+    pace: null,
+    budgetTier: null,
+    dayRhythm: null,
+    lodgingStyle: null,
+    dietaryNotes: null,
+    accessibilityNotes: null,
+    interests: [],
+    answeredAt: trip.answeredAt,
   };
 }
 
@@ -365,7 +398,9 @@ export function findPreferenceConflicts(
  *
  * Pass the durable profiles: per-trip overrides are applied here, so a caller
  * can't accidentally describe the group by their usual preferences when
- * someone has said this trip is different.
+ * someone has said this trip is different. Members present only in
+ * tripPreferences count too, over an empty profile — a member who joined via
+ * invite and answered only the trip deck is still part of the group.
  */
 export function profileToPromptContext(input: {
   destination: string | null;
@@ -380,9 +415,15 @@ export function profileToPromptContext(input: {
   const overrides = new Map(
     input.tripPreferences.map((pref) => [pref.userId, pref]),
   );
-  const effective = input.profiles.map((profile) =>
-    resolveEffectiveProfile(profile, overrides.get(profile.userId) ?? null),
-  );
+  const withProfile = new Set(input.profiles.map((profile) => profile.userId));
+  const effective = [
+    ...input.profiles.map((profile) =>
+      resolveEffectiveProfile(profile, overrides.get(profile.userId) ?? null),
+    ),
+    ...input.tripPreferences
+      .filter((pref) => !withProfile.has(pref.userId))
+      .map((pref) => resolveEffectiveProfile(null, pref)),
+  ];
 
   const group = aggregateGroupProfile(effective);
   const groupTrip = aggregateTripPreferences(input.tripPreferences);

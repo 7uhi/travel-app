@@ -129,14 +129,17 @@ export function PreferenceDeck({
     setStep((s) => Math.min(s + 1, questions.length));
   }
 
-  /** Skipping leaves the answer unset — nothing is written for it. */
+  /**
+   * Skipping clears the answer: an explicit empty value the save writes
+   * through, not a deleted key the save would ignore. On a first run the two
+   * are the same; on an edit run the difference is what makes "Skipped" in
+   * the review list true — a deleted key would silently keep the stored
+   * value for scalar questions while wiping it for interest questions.
+   */
   function skip() {
-    setAnswers((prev) => {
-      if (!question || !(question.id in prev)) return prev;
-      const next = { ...prev };
-      delete next[question.id];
-      return next;
-    });
+    if (question) {
+      record(question.id, question.kind === "multi-select" ? [] : "");
+    }
     advance();
   }
 
