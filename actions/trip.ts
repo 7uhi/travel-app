@@ -37,6 +37,8 @@ export type AddActivityInput = Omit<ActivityInput, "tripDayId">;
 
 /** Availability-poll windows are capped to keep the calendar UI manageable. */
 const MAX_WINDOW_DAYS = 180;
+/** Destinations longer than this are almost certainly a paste mistake. */
+const MAX_DESTINATION_LENGTH = 80;
 
 const TRIP_INCLUDE = {
   days: {
@@ -67,9 +69,15 @@ export async function createTrip(
   if (!userId) return fail("You must be signed in to create a trip.");
 
   const title = data.title?.trim();
-  const destination = data.destination?.trim();
+  // Null = the group hasn't picked a place yet; the preferences deck then asks
+  // the destination-finding questions instead of the itinerary ones.
+  const destination = data.destination?.trim() || null;
   if (!title) return fail("Title is required.");
-  if (!destination) return fail("Destination is required.");
+  if (destination && destination.length > MAX_DESTINATION_LENGTH) {
+    return fail(
+      `Destination must be ${MAX_DESTINATION_LENGTH} characters or fewer.`,
+    );
+  }
 
   if (
     data.totalBudget != null &&

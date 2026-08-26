@@ -10,6 +10,9 @@ import { createTrip } from "@/actions/trip";
 export function NewTripButton() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"dates" | "poll">("dates");
+  // Independent of `mode`: a trip can have fixed dates but no destination yet,
+  // or a date poll for a place that's already settled.
+  const [place, setPlace] = useState<"known" | "undecided">("known");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -25,7 +28,12 @@ export function NewTripButton() {
       const budgetRaw = String(formData.get("totalBudget") ?? "").trim();
       const base = {
         title: String(formData.get("title") ?? ""),
-        destination: String(formData.get("destination") ?? ""),
+        // The input isn't rendered at all while undecided, so there's nothing
+        // to read — createTrip stores null and the group picks a place later.
+        destination:
+          place === "known"
+            ? String(formData.get("destination") ?? "")
+            : undefined,
         totalBudget: budgetRaw === "" ? null : Number(budgetRaw),
       };
       const result = await createTrip(
@@ -95,14 +103,41 @@ export function NewTripButton() {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Destination">
-                <input
-                  name="destination"
-                  required
-                  placeholder="Portugal"
-                  className={inputClass}
-                />
-              </Field>
+              <div
+                role="radiogroup"
+                aria-label="Do you know where you're going?"
+                className="grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1"
+              >
+                <ModeButton
+                  active={place === "known"}
+                  onClick={() => setPlace("known")}
+                >
+                  I know where
+                </ModeButton>
+                <ModeButton
+                  active={place === "undecided"}
+                  onClick={() => setPlace("undecided")}
+                >
+                  Not decided yet
+                </ModeButton>
+              </div>
+
+              {place === "known" ? (
+                <Field label="Destination">
+                  <input
+                    name="destination"
+                    required
+                    placeholder="Portugal"
+                    className={inputClass}
+                  />
+                </Field>
+              ) : (
+                <p className="text-xs leading-relaxed text-stone-500">
+                  Everyone answers a few questions about what they're after, and
+                  the group picks a place from there.
+                </p>
+              )}
+
               <div
                 role="radiogroup"
                 aria-label="How will you pick dates?"

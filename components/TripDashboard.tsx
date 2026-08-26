@@ -1,6 +1,7 @@
 import { AvailabilityPlanner } from "@/components/availability/AvailabilityPlanner";
 import { ItineraryList } from "@/components/ItineraryList";
 import { TripHeader } from "@/components/TripHeader";
+import { PreferencesBanner } from "@/components/preferences/PreferencesBanner";
 import { formatCurrency, formatDateRange } from "@/lib/format";
 import type { TripAvailability, TripRole, TripWithDays } from "@/types";
 
@@ -15,6 +16,7 @@ export function TripDashboard({
   availability = null,
   currentUserId = null,
   spentCents = null,
+  preferencesNudge = null,
 }: {
   trip: TripWithDays;
   /** The viewer's membership role; controls owner-only UI like sharing. */
@@ -25,6 +27,8 @@ export function TripDashboard({
   currentUserId?: string | null;
   /** Total logged expenses; null when spending wasn't loaded. */
   spentCents?: number | null;
+  /** Which deck the viewer still owes, or null when they're all set. */
+  preferencesNudge?: "profile" | "trip" | null;
 }) {
   const scheduled = trip.startDate !== null;
   const respondedCount = availability
@@ -45,6 +49,10 @@ export function TripDashboard({
         respondedCount={scheduled ? null : respondedCount}
         spentCents={spentCents}
       />
+
+      {preferencesNudge && (
+        <PreferencesBanner tripId={trip.id} kind={preferencesNudge} />
+      )}
 
       <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -137,7 +145,7 @@ function TripFacts({
 }) {
   const owner = trip.members.find((m) => m.role === "OWNER");
   const facts: [string, string][] = [
-    ["Destination", trip.destination],
+    ["Destination", trip.destination ?? "TBD"],
     [
       "Dates",
       trip.startDate && trip.endDate

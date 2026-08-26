@@ -33,6 +33,8 @@ model User {
   personalPacking PackingItem[]     @relation("PersonalPackingItems")
   ideasCreated    ActivityIdea[]    @relation("IdeasCreated")
   activityVotes   ActivityVote[]
+  travelProfile   TravelProfile?
+  tripPreferences TripPreference[]
 }
 
 model Account {
@@ -81,7 +83,9 @@ model VerificationToken {
 model Trip {
   id          String    @id @default(cuid())
   title       String
-  destination String
+  // Null while the group is still deciding where to go — mirrors the nullable
+  // startDate + availability-poll idiom below.
+  destination String?
   // Null while the group is still picking dates via the availability poll.
   startDate   DateTime? @db.Date
   endDate     DateTime? @db.Date
@@ -105,6 +109,7 @@ model Trip {
   packingItems PackingItem[]
   packingTemplates PackingTemplate[]
   ideas        ActivityIdea[]
+  preferences  TripPreference[]
 }
 
 enum TripRole {
@@ -373,4 +378,174 @@ model PackingTemplateItem {
   template   PackingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
+}
+
+/* ------------------------------------------------------------------ */
+/* Travel preferences — durable per-user taste + per-trip answers      */
+/* ------------------------------------------------------------------ */
+
+enum TravelPace {
+  RELAXED
+  BALANCED
+  PACKED
+}
+
+enum BudgetTier {
+  SHOESTRING
+  MODERATE
+  COMFORT
+  LUXURY
+}
+
+enum DayRhythm {
+  EARLY_BIRD
+  FLEXIBLE
+  NIGHT_OWL
+}
+
+enum LodgingStyle {
+  HOSTEL
+  RENTAL
+  HOTEL
+  BOUTIQUE
+  CAMPING
+}
+
+enum InterestTag {
+  FOOD
+  NIGHTLIFE
+  ART_MUSEUMS
+  HISTORY
+  NATURE
+  HIKING
+  BEACH
+  WATER_SPORTS
+  ADVENTURE
+  SHOPPING
+  WELLNESS
+  LOCAL_LIFE
+}
+
+/// Region a member is willing to travel to. ANYWHERE is an explicit "don't
+/// care" that is compatible with every other answer (the identity element of
+/// the group intersection); null means the member never answered and is left
+/// out of consensus entirely. The two are not interchangeable.
+enum TravelRegion {
+  ANYWHERE
+  DOMESTIC
+  EUROPE
+  ASIA
+  AFRICA
+  NORTH_AMERICA
+  SOUTH_AMERICA
+  OCEANIA
+}
+
+/// NO_PREFERENCE is an explicit "don't care" (compatible with everything);
+/// null means unanswered. See the TravelRegion note.
+enum Climate {
+  WARM
+  MILD
+  COLD
+  NO_PREFERENCE
+}
+
+/// One per user: durable travel taste that outlives any single trip, so a
+/// member answers once and every later trip reuses it. Every answer is
+/// nullable because every deck question is skippable — null means "never
+/// answered" and is excluded from group consensus rather than counted.
+model TravelProfile {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pace         TravelPace?
+  budgetTier   BudgetTier?
+  dayRhythm    DayRhythm?
+  lodgingStyle LodgingStyle?
+
+  /// Hard filters, not tastes: free text so a safety-relevant constraint
+  /// ("severe tree-nut allergy") survives verbatim into the UI and into future
+  /// LLM prompts. Never averaged — unioned across the group. Visible to every
+  /// member of every trip this user belongs to; the deck says so at entry.
+  dietaryNotes       String?
+  accessibilityNotes String?
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  interests TravelInterest[]
+}
+
+/// A signed weight per interest tag, -2 (avoid) … +2 (love). A child table
+/// rather than columns so the set is SQL-aggregatable for group consensus, and
+/// so a future image-swipe deck can just increment weights. The range is
+/// enforced in lib/preferences.ts (Prisma can't express a CHECK constraint).
+model TravelInterest {
+  id     String      @id @default(cuid())
+  tag    InterestTag
+  weight Int         @default(0)
+
+  profileId String
+  profile   TravelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Leading column is profileId, so this doubles as the lookup index.
+  @@unique([profileId, tag])
+}
+
+/// One per (user, trip): answers that only apply to this trip. Mirrors the
+/// AvailabilityDay / ActivityVote per-member-row precedent.
+///
+/// Fields that also exist on TravelProfile are *overrides*, not deltas: null
+/// means "same as my usual", a value means "for this trip specifically".
+/// Resolve the pair with resolveEffectiveProfile in lib/preferences.ts rather
+/// than reading either side alone.
+model TripPreference {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Overrides TravelProfile.budgetTier for this trip; null = same as usual.
+  budgetComfort BudgetTier?
+  mustDo        String?
+  dealBreakers  String?
+
+  /// Only asked while trip.destination is null.
+  preferredRegion  TravelRegion?
+  preferredClimate Climate?
+  /// Hours of travel from home the member will tolerate. The group is limited
+  /// by the smallest value, so an Int (min() is free) beats an ordinal enum.
+  maxTravelHours Int?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  interests TripInterest[]
+
+  @@unique([userId, tripId])
+  // tripId isn't the leading column of the unique above, and the Preferences
+  // tab queries by it.
+  @@index([tripId])
+}
+
+/// A member's interest weights for one trip specifically, in the same -2…+2
+/// scale as TravelInterest. These are absolute values, not deltas: when a
+/// TripPreference has any of these rows they replace the durable set wholesale
+/// for that trip, and when it has none the durable set applies unchanged.
+///
+/// Storing overrides rather than deltas is what keeps a trip answer from
+/// permanently rewriting the member's general taste, and what makes an answer
+/// readable back out again (a delta folded into a shared weight isn't).
+model TripInterest {
+  id     String      @id @default(cuid())
+  tag    InterestTag
+  weight Int         @default(0)
+
+  tripPreferenceId String
+  tripPreference   TripPreference @relation(fields: [tripPreferenceId], references: [id], onDelete: Cascade)
+
+  @@unique([tripPreferenceId, tag])
 }
