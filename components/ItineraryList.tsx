@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, MapPin, Pencil, Plus } from "lucide-react";
 
 import { ActivityDialog } from "@/components/itinerary/ActivityDialog";
@@ -49,12 +49,14 @@ export function ItineraryList({
     );
   }
 
+  const activityTotal = days.reduce((n, day) => n + day.activities.length, 0);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-stone-500">
-          {days.length} {days.length === 1 ? "day" : "days"} ·{" "}
-          {days.reduce((n, day) => n + day.activities.length, 0)} activities
+          {days.length} {days.length === 1 ? "day" : "days"} · {activityTotal}{" "}
+          {activityTotal === 1 ? "activity" : "activities"}
         </p>
         <button
           type="button"
@@ -218,9 +220,7 @@ function ActivityRow({
       <div className="min-w-0 flex-1">
         <p className="font-medium leading-snug">{activity.title}</p>
         {activity.description && (
-          <p className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-stone-500">
-            {activity.description}
-          </p>
+          <ActivityDescription text={activity.description} />
         )}
         {activity.locationName && (
           <p className="mt-1.5 flex items-center gap-1 text-xs text-stone-500">
@@ -247,5 +247,52 @@ function ActivityRow({
         </button>
       )}
     </li>
+  );
+}
+
+/**
+ * Long notes (meeting points, booking references) are clamped to two lines to
+ * keep the day scannable, with an inline toggle to read the rest — so viewers,
+ * who have no edit dialog to open, can still see everything.
+ */
+function ActivityDescription({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || expanded) return;
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, text]);
+
+  return (
+    <>
+      <p
+        id={id}
+        ref={ref}
+        className={`mt-0.5 whitespace-pre-line text-sm leading-relaxed text-stone-500 ${
+          expanded ? "" : "line-clamp-2"
+        }`}
+      >
+        {text}
+      </p>
+      {(clamped || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-xs font-medium text-pine transition-colors hover:text-pine-dark"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </>
   );
 }

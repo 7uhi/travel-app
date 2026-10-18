@@ -4,6 +4,7 @@ import { getMyPreferences } from "@/actions/preferences";
 import { getTripById } from "@/actions/trip";
 import { LoadError } from "@/components/LoadError";
 import { PreferenceDeck } from "@/components/preferences/PreferenceDeck";
+import { currentUserId } from "@/lib/session";
 
 /**
  * The trip deck: what this member wants out of this trip specifically.
@@ -19,9 +20,10 @@ export default async function PreferenceOnboardingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, mineRes] = await Promise.all([
+  const [tripRes, mineRes, userId] = await Promise.all([
     getTripById(id),
     getMyPreferences(id),
+    currentUserId(),
   ]);
 
   if (!tripRes.success) {
@@ -31,6 +33,7 @@ export default async function PreferenceOnboardingPage({
   if (!mineRes.success) return <LoadError message={mineRes.error} />;
 
   const trip = tripRes.data;
+  if (!userId) notFound();
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
@@ -39,6 +42,7 @@ export default async function PreferenceOnboardingPage({
       </p>
       <PreferenceDeck
         mode="trip"
+        userId={userId}
         tripId={trip.id}
         destination={trip.destination}
         profile={mineRes.data.profile}

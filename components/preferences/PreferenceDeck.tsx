@@ -42,6 +42,7 @@ import type {
  */
 export function PreferenceDeck({
   mode,
+  userId,
   tripId,
   destination = null,
   profile,
@@ -49,6 +50,8 @@ export function PreferenceDeck({
   returnTo,
 }: {
   mode: "profile" | "trip";
+  /** The signed-in member; scopes the resumable draft to their account. */
+  userId: string;
   /** Required in trip mode. */
   tripId?: string;
   destination?: string | null;
@@ -71,8 +74,12 @@ export function PreferenceDeck({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  // Keyed by account as well as deck: a tab outlives a sign-out, and the next
+  // account to sign in there must not resume someone else's answers.
   const draftKey =
-    mode === "profile" ? "roam.prefs-draft.profile" : `roam.prefs-draft.${tripId}`;
+    mode === "profile"
+      ? `roam.prefs-draft.${userId}.profile`
+      : `roam.prefs-draft.${userId}.trip.${tripId}`;
 
   /*
    * A run lives in component state until the final save, so any remount —
