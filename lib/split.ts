@@ -27,10 +27,21 @@ export function splitEqual(totalCents: number, userIds: string[]): Share[] {
 }
 
 /**
- * Splits a total by percentages (must sum to 100 within ±0.01). Each share is
- * floored to whole cents, then leftover cents are distributed by largest
- * fractional remainder (ties go to the earlier participant), so the result
- * always sums exactly to the total.
+ * Whether a percentage total is close enough to 100 to accept (±0.01), so
+ * typing 33.33 three times works. Compared in hundredths of a percent so
+ * floating-point noise can't reject 100.01 or accept 100.02.
+ */
+export function percentsBalanced(percentTotal: number): boolean {
+  return Math.abs(Math.round(percentTotal * 100) - 10_000) <= 1;
+}
+
+/**
+ * Splits a total by percentages (must sum to 100 within ±0.01). Percentages
+ * are weighted against their actual sum, so the ±0.01 tolerance for typing
+ * 33.33 three times never creates or loses money. Each share is floored to
+ * whole cents, then leftover cents are distributed by largest fractional
+ * remainder (ties go to the earlier participant), so the result always sums
+ * exactly to the total.
  */
 export function splitByPercent(
   totalCents: number,
@@ -40,15 +51,15 @@ export function splitByPercent(
   if (shares.length === 0) {
     throw new Error("At least one participant is required.");
   }
-  const percentSum = shares.reduce((s, x) => s + x.percent, 0);
-  if (Math.abs(percentSum - 100) > 0.01) {
-    throw new Error("Percentages must add up to 100.");
-  }
-  if (shares.some((s) => s.percent <= 0)) {
+  if (shares.some((s) => !Number.isFinite(s.percent) || s.percent <= 0)) {
     throw new Error("Each percentage must be greater than zero.");
   }
+  const percentSum = shares.reduce((s, x) => s + x.percent, 0);
+  if (!percentsBalanced(percentSum)) {
+    throw new Error("Percentages must add up to 100.");
+  }
 
-  const raw = shares.map((s) => (totalCents * s.percent) / 100);
+  const raw = shares.map((s) => (totalCents * s.percent) / percentSum);
   const floored = raw.map(Math.floor);
   let leftover = totalCents - floored.reduce((a, b) => a + b, 0);
 
@@ -106,6 +117,26 @@ export function prorate(
   return weights.map((w, i) => ({ userId: w.userId, amountCents: result[i] }));
 }
 
+/**
+ * The final invariant every stored split must satisfy, whichever mode
+ * produced it: one share per participant, whole non-negative cents, summing
+ * exactly to the expense total. Returns an error message, or null when valid.
+ */
+export function checkSharesTotal(
+  totalCents: number,
+  shares: Share[],
+): string | null {
+  if (shares.length === 0) return "At least one participant is required.";
+  if (new Set(shares.map((s) => s.userId)).size !== shares.length) {
+    return "Each participant can only appear once.";
+  }
+  if (shares.some((s) => !Number.isInteger(s.amountCents) || s.amountCents < 0)) {
+    return "Each share must be a whole, non-negative amount.";
+  }
+  const sum = shares.reduce((s, x) => s + x.amountCents, 0);
+  return sum === totalCents ? null : "Shares don't add up to the expense total.";
+}
+
 /** Validates user-provided exact shares against the expense total. */
 export function validateExactShares(
   totalCents: number,
@@ -155,6 +186,22 @@ export function computeBalances(input: BalanceInput): Map<string, number> {
     add(s.toUserId, -s.amountCents);
   }
   return net;
+}
+
+/**
+ * The largest repayment from one member to another that the current balances
+ * support: what the payer owes overall, capped by what the recipient is owed
+ * overall. Anything larger would flip a debtor into a creditor, which is what
+ * recording the same suggested payment twice would otherwise do.
+ */
+export function maxRepaymentCents(
+  balances: Map<string, number>,
+  fromUserId: string,
+  toUserId: string,
+): number {
+  const owes = -(balances.get(fromUserId) ?? 0);
+  const owed = balances.get(toUserId) ?? 0;
+  return Math.max(0, Math.min(owes, owed));
 }
 
 export interface Payment {

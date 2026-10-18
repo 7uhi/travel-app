@@ -16,9 +16,16 @@ import {
   dayDatesBetween,
   inclusiveDayCount,
   MAX_TRIP_DAYS,
+  parseIsoDateTime,
   parseUtcDate,
 } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
+import {
+  activityInputSchema,
+  INVALID_INPUT,
+  parseInput,
+  tripInputSchema,
+} from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
 import type {
   Activity,
@@ -37,8 +44,11 @@ export type AddActivityInput = Omit<ActivityInput, "tripDayId">;
 
 /** Availability-poll windows are capped to keep the calendar UI manageable. */
 const MAX_WINDOW_DAYS = 180;
-/** Destinations longer than this are almost certainly a paste mistake. */
+/** Text longer than these limits is almost certainly a paste mistake. */
 const MAX_DESTINATION_LENGTH = 80;
+const MAX_TITLE_LENGTH = 120;
+const MAX_DESCRIPTION_LENGTH = 2_000;
+const MAX_LOCATION_LENGTH = 200;
 
 const TRIP_INCLUDE = {
   days: {
@@ -63,28 +73,30 @@ const TRIP_INCLUDE = {
  * via setTripDates).
  */
 export async function createTrip(
-  data: TripInput,
+  input: TripInput,
 ): Promise<ActionResult<TripWithDays>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to create a trip.");
 
-  const title = data.title?.trim();
+  const data = parseInput(tripInputSchema, input);
+  if (!data) return fail(INVALID_INPUT);
+
+  const title = data.title.trim();
   // Null = the group hasn't picked a place yet; the preferences deck then asks
   // the destination-finding questions instead of the itinerary ones.
   const destination = data.destination?.trim() || null;
   if (!title) return fail("Title is required.");
+  if (title.length > MAX_TITLE_LENGTH) {
+    return fail(`Title must be ${MAX_TITLE_LENGTH} characters or fewer.`);
+  }
   if (destination && destination.length > MAX_DESTINATION_LENGTH) {
     return fail(
       `Destination must be ${MAX_DESTINATION_LENGTH} characters or fewer.`,
     );
   }
 
-  if (
-    data.totalBudget != null &&
-    (!Number.isFinite(data.totalBudget) || data.totalBudget < 0)
-  ) {
-    return fail("Total budget must be a non-negative number.");
-  }
+  const budget = parseBudget(data.totalBudget);
+  if (typeof budget === "object" && budget !== null) return fail(budget.error);
 
   const hasDates = Boolean(data.startDate?.trim() || data.endDate?.trim());
   const hasWindow = Boolean(
@@ -104,10 +116,10 @@ export async function createTrip(
     if (endDate < startDate) {
       return fail("End date must be on or after the start date.");
     }
-    const dayDates = dayDatesBetween(startDate, endDate);
-    if (dayDates.length > MAX_TRIP_DAYS) {
+    if (inclusiveDayCount(startDate, endDate) > MAX_TRIP_DAYS) {
       return fail(`Trips are limited to ${MAX_TRIP_DAYS} days.`);
     }
+    const dayDates = dayDatesBetween(startDate, endDate);
     tripDates = {
       title,
       destination,
@@ -144,7 +156,7 @@ export async function createTrip(
     const trip = await prisma.trip.create({
       data: {
         ...tripDates,
-        totalBudget: data.totalBudget,
+        totalBudget: budget,
         members: { create: { userId, role: "OWNER" } },
       },
       include: TRIP_INCLUDE,
@@ -273,18 +285,8 @@ export async function updateTripBudget(
   if (!userId) return fail("You must be signed in to change the budget.");
   if (!tripId) return fail("Trip id is required.");
 
-  if (
-    totalBudget != null &&
-    (!Number.isFinite(totalBudget) || totalBudget < 0)
-  ) {
-    return fail("Total budget must be a non-negative number.");
-  }
-  // Decimal(12,2) column: keep cents precision and stay within range.
-  const budget =
-    totalBudget == null ? null : Math.round(totalBudget * 100) / 100;
-  if (budget != null && budget >= 1e10) {
-    return fail("Total budget is too large.");
-  }
+  const budget = parseBudget(totalBudget);
+  if (typeof budget === "object" && budget !== null) return fail(budget.error);
 
   try {
     const membership = await prisma.tripMember.findUnique({
@@ -441,8 +443,22 @@ export async function deleteActivity(
 /* async functions and types)                                           */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Validates a budget for the Decimal(12,2) column: non-negative, rounded to
+ * cents, and within range. Null clears it.
+ */
+function parseBudget(value: unknown): number | null | { error: string } {
+  if (value == null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return { error: "Total budget must be a non-negative number." };
+  }
+  const budget = Math.round(value * 100) / 100;
+  if (budget >= 1e10) return { error: "Total budget is too large." };
+  return budget;
+}
+
 /** Validates AddActivityInput and normalizes it for Prisma writes. */
-function parseActivityFields(data: AddActivityInput):
+function parseActivityFields(input: unknown):
   | {
       title: string;
       description: string | null;
@@ -453,40 +469,51 @@ function parseActivityFields(data: AddActivityInput):
       cost: number | null;
     }
   | { error: string } {
-  const title = data.title?.trim();
+  const data = parseInput(activityInputSchema, input);
+  if (!data) return { error: INVALID_INPUT };
+
+  const title = data.title.trim();
   if (!title) return { error: "Activity title is required." };
+  if (title.length > MAX_TITLE_LENGTH) {
+    return { error: `Title must be ${MAX_TITLE_LENGTH} characters or fewer.` };
+  }
+  const description = data.description?.trim() || null;
+  if (description && description.length > MAX_DESCRIPTION_LENGTH) {
+    return {
+      error: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer.`,
+    };
+  }
+  const locationName = data.locationName?.trim() || null;
+  if (locationName && locationName.length > MAX_LOCATION_LENGTH) {
+    return {
+      error: `Location must be ${MAX_LOCATION_LENGTH} characters or fewer.`,
+    };
+  }
 
   let time: Date | null = null;
   if (data.time != null) {
-    time = parseDateTime(data.time);
+    time = parseIsoDateTime(data.time);
     if (!time) return { error: "Time must be a valid ISO datetime string." };
   }
 
-  const hasLatitude = data.latitude != null;
-  const hasLongitude = data.longitude != null;
-  if (hasLatitude !== hasLongitude) {
+  const latitude = data.latitude ?? null;
+  const longitude = data.longitude ?? null;
+  if ((latitude === null) !== (longitude === null)) {
     return { error: "Latitude and longitude must be provided together." };
   }
-  if (hasLatitude && (data.latitude! < -90 || data.latitude! > 90)) {
+  if (latitude !== null && !(latitude >= -90 && latitude <= 90)) {
     return { error: "Latitude must be between -90 and 90." };
   }
-  if (hasLongitude && (data.longitude! < -180 || data.longitude! > 180)) {
+  if (longitude !== null && !(longitude >= -180 && longitude <= 180)) {
     return { error: "Longitude must be between -180 and 180." };
   }
 
-  if (data.cost != null && (!Number.isFinite(data.cost) || data.cost < 0)) {
+  const cost = parseBudget(data.cost);
+  if (typeof cost === "object" && cost !== null) {
     return { error: "Cost must be a non-negative number." };
   }
 
-  return {
-    title,
-    description: data.description?.trim() || null,
-    time,
-    locationName: data.locationName?.trim() || null,
-    latitude: data.latitude ?? null,
-    longitude: data.longitude ?? null,
-    cost: data.cost ?? null,
-  };
+  return { title, description, time, locationName, latitude, longitude, cost };
 }
 
 /**
@@ -519,11 +546,6 @@ async function activityEditGate(
     return { error: "You don't have permission to edit this trip." };
   }
   return { tripId: activity.tripDay.tripId };
-}
-
-function parseDateTime(value: string): Date | null {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 /* Convert Prisma records (Date, Decimal) into the JSON-safe shapes from

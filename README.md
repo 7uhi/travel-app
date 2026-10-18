@@ -93,12 +93,18 @@ components/                                UI (server + client components)
   ranked suggestions (`lib/availability.ts`) — which generates the `TripDay`
   rows and unlocks the itinerary.
 - **Membership & roles.** `TripMember` links users to trips with a role:
-  `OWNER`, `EDITOR`, or `VIEWER`. Viewers are read-only. `Invite` tokens are
-  multi-use, expire after 7 days, and grant `EDITOR` or `VIEWER` — never
-  `OWNER`.
+  `OWNER`, `EDITOR`, or `VIEWER`. Viewers can't edit the itinerary,
+  expenses, or shared packing list; they can still vote on ideas, answer the
+  group questions, mark their own availability, keep a personal packing list,
+  and record repayments they made or received. `Invite` tokens are multi-use, expire after 7 days, and grant
+  `EDITOR` or `VIEWER` — never `OWNER`. Opening an invite link only shows
+  a preview; joining is an explicit POST from its Join button.
 - **Expenses.** `Expense` → `ExpenseSplit` (one share per participant) plus
   `Settlement` for recorded repayments. All money is stored as **integer
-  cents**; each trip has a single currency.
+  cents**; each trip has a single currency, and an expense's shares always sum
+  to its amount. A repayment can't exceed what the balances support, records
+  who entered it, and can be removed by the people involved, its recorder, or
+  the owner.
 - **Preferences, in two layers, asked at two moments.** `TravelProfile` is one
   row per *user* — durable taste (pace, budget tier, rhythm, lodging) that
   outlives any single trip. It's collected by the account-level deck at
