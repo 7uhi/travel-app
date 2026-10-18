@@ -9,6 +9,7 @@ import {
   saveMyProfile,
   saveMyTripPreferences,
 } from "@/actions/preferences";
+import { preferenceDraftKey } from "@/lib/preference-drafts";
 import {
   INTEREST_LABELS,
   PROFILE_QUESTIONS,
@@ -74,12 +75,10 @@ export function PreferenceDeck({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  // Keyed by account as well as deck: a tab outlives a sign-out, and the next
-  // account to sign in there must not resume someone else's answers.
-  const draftKey =
-    mode === "profile"
-      ? `roam.prefs-draft.${userId}.profile`
-      : `roam.prefs-draft.${userId}.trip.${tripId}`;
+  const draftKey = preferenceDraftKey(
+    userId,
+    mode === "trip" ? tripId : undefined,
+  );
 
   /*
    * A run lives in component state until the final save, so any remount —

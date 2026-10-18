@@ -80,7 +80,12 @@ export default async function TripPreferencesPage({
               trip's answers, the profile they're inherited from, and the way
               back to inheriting them again. */}
           <div className="flex flex-wrap items-center gap-1">
-            {mine?.trip && <ResetTripPreferencesButton tripId={trip.id} />}
+            {mine?.trip && currentUserId && (
+              <ResetTripPreferencesButton
+                tripId={trip.id}
+                userId={currentUserId}
+              />
+            )}
             <Link
               href={`/onboarding?next=/trips/${trip.id}/preferences`}
               className="rounded-full px-3 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
