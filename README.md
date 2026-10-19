@@ -195,3 +195,65 @@ the edge runtime:
   by verifying the session cookie without a database round-trip.
 - `auth.ts` — spreads the same config and adds the `PrismaAdapter` for the
   Node runtime (sign-in persists users to Postgres).
+
+## Testing
+
+There are three layers, and CI (`.github/workflows/ci.yml`) runs all of them
+on every pull request and push to `main`:
+
+| Layer | Command | Covers |
+| --- | --- | --- |
+| Unit | `npm test` | Pure logic in `lib/*.test.ts` (split math, consensus, …). No I/O. |
+| Integration | `npm run test:integration` | Server actions in `actions/` against a real Postgres, with the session and `next/cache`, `next/headers`, and `next/navigation` mocked (`tests/integration/`). Includes concurrent-request tests for the row-locking fixes. |
+| End-to-end | `npm run test:e2e` | The production build in Chromium, desktop and a 375×667 mobile viewport, signed in as seeded users (`e2e/`). |
+
+The integration race tests for leaving a trip, rescheduling, and switching
+currency don't leave the interleaving to chance: `holdOpen` in
+`tests/integration/helpers.ts` keeps a competing transaction open, and
+`untilBlocked` waits until an action is parked on its lock, so the risky
+ordering happens on every run. Each of them fails when the lock it guards is
+removed.
+
+`npm run typecheck` runs the TypeScript compiler. CI also runs
+`npm audit --omit=dev --audit-level=critical`, so a critical advisory in a
+production dependency fails the build. The level is `critical` rather than
+`high` on purpose: the remaining high advisories are in Prisma 6's own
+tooling (`prisma` → `@prisma/config` → `deepmerge-ts`), only fixable by the
+Prisma 7 upgrade, and accepted until then.
+
+The integration and e2e suites **wipe every table**, so they need a
+disposable database. They read `DATABASE_URL` (default
+`postgresql://postgres@localhost:5432/travel_test`), apply migrations
+themselves, and refuse to run unless the database name contains `test`.
+The quickest throwaway Postgres is a container:
+
+```sh
+docker run -d --name travel-test-db -e POSTGRES_HOST_AUTH_METHOD=trust \
+  -e POSTGRES_DB=travel_test -p 127.0.0.1:5432:5432 postgres:17
+npm run test:integration
+npx playwright install chromium   # once per machine
+npm run test:e2e
+docker rm -f travel-test-db
+```
+
+If a local Postgres already holds port 5432, map the container to another
+port (`-p 127.0.0.1:5433:5432`) and export
+`DATABASE_URL=postgresql://postgres@localhost:5433/travel_test`.
+
+Notes on the e2e suite:
+
+- Locally it runs `npm run build && npm start` on port 3100 (`E2E_PORT`
+  overrides), or reuses a server already listening there. With `CI` set it
+  only runs `npm start`, because CI builds in an earlier step.
+- Global setup seeds an owner, editor, viewer, and non-member plus one trip
+  (`e2e/seed.ts`), and mints Auth.js session cookies for them, so no Google
+  credentials are needed. `test.use({ signedInAs: "viewer" })` from
+  `e2e/fixtures.ts` signs a test in.
+- Tests that change data (joining via an invite, sharing or revoking a link,
+  changing a member's role, recording a repayment) create their own users or
+  trip through the `db` fixture and sign in with `signIn(user)`, so they
+  don't disturb the shared seed, the other viewport, or a retry.
+  `seedSharedDinner(db)` in `e2e/seed.ts` creates such a trip, where the
+  editor and the viewer each owe the owner $10.
+- Failures leave traces and screenshots in `playwright-report/`
+  (`npx playwright show-report`).
