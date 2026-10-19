@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 
 import { createTrip } from "@/actions/trip";
+import { amountInputProps, CURRENCIES } from "@/lib/currencies";
 
 /** "New trip" button that opens a create-trip dialog and routes to the new dashboard. */
 export function NewTripButton() {
@@ -13,6 +14,9 @@ export function NewTripButton() {
   // Independent of `mode`: a trip can have fixed dates but no destination yet,
   // or a date poll for a place that's already settled.
   const [place, setPlace] = useState<"known" | "undecided">("known");
+  // Chosen up front: the budget is entered in it, and changing it later only
+  // relabels amounts, never converts them.
+  const [currency, setCurrency] = useState("USD");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -34,6 +38,7 @@ export function NewTripButton() {
           place === "known"
             ? String(formData.get("destination") ?? "")
             : undefined,
+        currency,
         totalBudget: budgetRaw === "" ? null : Number(budgetRaw),
       };
       const result = await createTrip(
@@ -213,16 +218,31 @@ export function NewTripButton() {
                   </p>
                 </>
               )}
-              <Field label="Total budget (optional)">
-                <input
-                  name="totalBudget"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="2000"
-                  className={inputClass}
-                />
-              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Currency">
+                  <select
+                    name="currency"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className={inputClass}
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={`Budget in ${currency}`}>
+                  <input
+                    name="totalBudget"
+                    {...amountInputProps(currency)}
+                    min="0"
+                    placeholder="Optional"
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
 
               {error && (
                 <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

@@ -29,6 +29,9 @@ export const INVALID_INPUT = "That request wasn't in the expected format.";
 
 export const idSchema = id;
 
+/** An ISO 4217 code; actions check it against lib/currencies for a specific message. */
+export const currencySchema = z.string().max(3);
+
 export const tripInputSchema: z.ZodType<TripInput> = z.object({
   title: text,
   destination: text.optional(),
@@ -37,6 +40,7 @@ export const tripInputSchema: z.ZodType<TripInput> = z.object({
   windowStart: text.optional(),
   windowEnd: text.optional(),
   durationDays: numeric.optional(),
+  currency: currencySchema.optional(),
   totalBudget: numeric.nullish(),
 });
 

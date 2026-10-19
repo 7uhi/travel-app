@@ -11,7 +11,14 @@ import type {
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
-import { isSupportedCurrency } from "@/lib/currencies";
+import {
+  isSupportedCurrency,
+  isWholeUnit,
+  isZeroDecimal,
+  summarizeTripAmounts,
+  wholeUnitsMessage,
+  zeroDecimalRefusal,
+} from "@/lib/currencies";
 import {
   dayDatesBetween,
   inclusiveDayCount,
@@ -30,6 +37,7 @@ import { currentUserId } from "@/lib/session";
 import type {
   Activity,
   ActivityInput,
+  CurrencyChangeOptions,
   TripDayWithActivities,
   TripInput,
   TripMemberWithUser,
@@ -70,7 +78,8 @@ const TRIP_INCLUDE = {
  * Creates a trip owned by the signed-in user (as an OWNER TripMember), in one
  * of two modes: with fixed dates (pre-generates one TripDay per calendar day)
  * or with an availability-poll window (no days until the owner confirms dates
- * via setTripDates).
+ * via setTripDates). The currency (USD unless chosen) is fixed up front so
+ * the budget is entered in it — whole numbers for zero-decimal currencies.
  */
 export async function createTrip(
   input: TripInput,
@@ -95,8 +104,14 @@ export async function createTrip(
     );
   }
 
+  const currency = data.currency ?? "USD";
+  if (!isSupportedCurrency(currency)) return fail("Unsupported currency code.");
+
   const budget = parseBudget(data.totalBudget);
   if (typeof budget === "object" && budget !== null) return fail(budget.error);
+  if (budget !== null && !isWholeUnit(Math.round(budget * 100), currency)) {
+    return fail(wholeUnitsMessage("The total budget", currency));
+  }
 
   const hasDates = Boolean(data.startDate?.trim() || data.endDate?.trim());
   const hasWindow = Boolean(
@@ -156,6 +171,7 @@ export async function createTrip(
     const trip = await prisma.trip.create({
       data: {
         ...tripDates,
+        currency,
         totalBudget: budget,
         members: { create: { userId, role: "OWNER" } },
       },
@@ -236,13 +252,23 @@ export async function getTripById(
 }
 
 /**
- * Changes the trip's currency. OWNER only. Existing expenses are relabeled to
- * the new currency (amounts are not converted — the trip is single-currency,
- * so balances and totals stay coherent).
+ * Changes the trip's currency. OWNER only. Nothing is converted: every stored
+ * amount (expenses, shares, repayments, the budget, planned costs) keeps its
+ * number under the new code, which keeps the single-currency ledger coherent
+ * but changes what the numbers mean. So it only happens silently while the
+ * trip holds no amounts; after that the caller must pass `relabel: true`,
+ * which the UI sends once the owner has confirmed an example of the relabel.
+ *
+ * Switching to a zero-decimal currency is refused while any expense, share,
+ * repayment, or budget amount has cents: $45.50 can't become ¥45.50. The trip
+ * row is locked across the check and the write, and expense writes lock it
+ * too (lockTripCurrency in actions/expense.ts), so an amount saved at the
+ * same moment can't slip past the check.
  */
 export async function updateTripCurrency(
   tripId: string,
   currency: string,
+  options: CurrencyChangeOptions = {},
 ): Promise<ActionResult<{ currency: string }>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to change the currency.");
@@ -262,10 +288,55 @@ export async function updateTripCurrency(
       return fail("Only the trip owner can change the currency.");
     }
 
-    await prisma.$transaction([
-      prisma.trip.update({ where: { id: tripId }, data: { currency } }),
-      prisma.expense.updateMany({ where: { tripId }, data: { currency } }),
-    ]);
+    const refusal = await prisma.$transaction(async (tx): Promise<string | null> => {
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          currency: true,
+          totalBudget: true,
+          expenses: {
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+            select: {
+              description: true,
+              amountCents: true,
+              splits: { select: { amountCents: true } },
+            },
+          },
+          settlements: { select: { amountCents: true } },
+          days: {
+            select: {
+              activities: {
+                where: { cost: { gt: 0 } },
+                select: { title: true, cost: true },
+              },
+            },
+          },
+        },
+      });
+      if (!trip) return "Trip not found.";
+      if (trip.currency === currency) return null;
+
+      const { example, fractional } = summarizeTripAmounts({
+        totalBudget: trip.totalBudget?.toNumber() ?? null,
+        expenses: trip.expenses,
+        settlementCents: trip.settlements.map((s) => s.amountCents),
+        activityCosts: trip.days
+          .flatMap((d) => d.activities)
+          .map((a) => ({ title: a.title, cost: a.cost?.toNumber() ?? null })),
+      });
+      if (example && options?.relabel !== true) {
+        return `This trip already has amounts in ${trip.currency}. Switching to ${currency} relabels them without converting, so it has to be confirmed first.`;
+      }
+      if (fractional && isZeroDecimal(currency)) {
+        return zeroDecimalRefusal(currency, trip.currency, fractional);
+      }
+
+      await tx.trip.update({ where: { id: tripId }, data: { currency } });
+      await tx.expense.updateMany({ where: { tripId }, data: { currency } });
+      return null;
+    });
+    if (refusal) return fail(refusal);
 
     revalidatePath(`/trips/${tripId}`);
     revalidatePath(`/trips/${tripId}/expenses`);
@@ -276,7 +347,10 @@ export async function updateTripCurrency(
   }
 }
 
-/** Sets or clears (null) the trip's total budget. OWNER only. */
+/**
+ * Sets or clears (null) the trip's total budget, in the trip's currency:
+ * whole numbers when it has no decimal places. OWNER only.
+ */
 export async function updateTripBudget(
   tripId: string,
   totalBudget: number | null,
@@ -298,10 +372,22 @@ export async function updateTripBudget(
       return fail("Only the trip owner can change the budget.");
     }
 
-    await prisma.trip.update({
-      where: { id: tripId },
-      data: { totalBudget: budget },
+    const refusal = await prisma.$transaction(async (tx): Promise<string | null> => {
+      // Locked like updateTripCurrency, so the currency this budget is
+      // checked against is still the trip's currency when it's written.
+      const [trip] = await tx.$queryRaw<{ currency: string }[]>`
+        SELECT currency FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
+      if (!trip) return "Trip not found.";
+      if (budget !== null && !isWholeUnit(Math.round(budget * 100), trip.currency)) {
+        return wholeUnitsMessage("The total budget", trip.currency);
+      }
+      await tx.trip.update({
+        where: { id: tripId },
+        data: { totalBudget: budget },
+      });
+      return null;
     });
+    if (refusal) return fail(refusal);
 
     revalidatePath(`/trips/${tripId}`);
     revalidatePath(`/trips/${tripId}/expenses`);

@@ -7,20 +7,32 @@
  * viewer's timezone.
  */
 
+/** Major units → "$2,000", "$110.50" (never "$110.5"), "¥4,500". */
 export function formatCurrency(amount: number, currency = "USD"): string {
+  const digits = Number.isInteger(amount) ? 0 : 2;
   return new Intl.NumberFormat("en", {
     style: "currency",
     currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(amount);
 }
 
-/** Integer cents → "$45.00". Intl handles 0-decimal currencies like JPY. */
+/**
+ * Integer hundredths → "$45.00", "¥4,500". Intl drops the decimals of
+ * zero-decimal currencies like JPY, which would round an amount stored with
+ * cents (from before whole units were enforced) out of sight — so anything
+ * with cents always shows them: "¥333.33", never "¥333".
+ */
 export function formatCents(cents: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en", { style: "currency", currency }).format(
-    cents / 100,
-  );
+  return new Intl.NumberFormat("en", {
+    style: "currency",
+    currency,
+    ...(cents % 100 !== 0 && {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  }).format(cents / 100);
 }
 
 /** "Sat, Sep 12" */

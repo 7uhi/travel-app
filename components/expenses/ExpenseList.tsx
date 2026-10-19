@@ -12,6 +12,7 @@ import { Avatar } from "@/components/Avatar";
 import { DeleteExpenseButton } from "@/components/expenses/DeleteExpenseButton";
 import { EditExpenseButton } from "@/components/expenses/EditExpenseButton";
 import type { Member } from "@/components/expenses/ExpenseDialog";
+import { ExpenseDetailsButton } from "@/components/expenses/ExpenseDetailsButton";
 import { formatCents, formatDayDate } from "@/lib/format";
 import type { ExpenseCategory, ExpenseWithDetails } from "@/types";
 
@@ -24,7 +25,11 @@ const CATEGORY_META: Record<ExpenseCategory, { icon: LucideIcon; label: string }
   OTHER: { icon: Receipt, label: "Other" },
 };
 
-/** Expenses grouped by calendar day, newest day first. */
+/**
+ * Expenses grouped by calendar day, newest day first. Every row opens a
+ * read-only breakdown for any member; the payer and the owner also get
+ * Edit and Delete beside it.
+ */
 export function ExpenseList({
   expenses,
   currency,
@@ -107,29 +112,36 @@ function ExpenseRow({
   const splitCount = expense.splits.length;
 
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-pine-soft text-pine">
-        <Icon size={16} />
-      </span>
+    <li className="flex items-center gap-1 px-2 py-1.5">
+      <ExpenseDetailsButton
+        expense={expense}
+        currency={currency}
+        categoryLabel={label}
+        currentUserId={currentUserId}
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-pine-soft text-pine">
+          <Icon size={16} />
+        </span>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium leading-snug">
-          {expense.description}
-        </p>
-        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-stone-500">
-          <Avatar
-            name={expense.paidBy.name}
-            image={expense.paidBy.image}
-            size={16}
-          />
-          {expense.paidBy.name ?? "Someone"} paid · {label} · split{" "}
-          {splitCount} {splitCount === 1 ? "way" : "ways"}
-        </p>
-      </div>
+        <span className="block min-w-0 flex-1">
+          <span className="block truncate font-medium leading-snug">
+            {expense.description}
+          </span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-xs text-stone-500">
+            <Avatar
+              name={expense.paidBy.name}
+              image={expense.paidBy.image}
+              size={16}
+            />
+            {expense.paidBy.name ?? "Someone"} paid · {label} · split{" "}
+            {splitCount} {splitCount === 1 ? "way" : "ways"}
+          </span>
+        </span>
 
-      <p className="shrink-0 text-sm font-medium tabular-nums">
-        {formatCents(expense.amountCents, currency)}
-      </p>
+        <span className="shrink-0 text-sm font-medium tabular-nums">
+          {formatCents(expense.amountCents, currency)}
+        </span>
+      </ExpenseDetailsButton>
       {canModify && currentUserId && (
         <EditExpenseButton
           expense={expense}

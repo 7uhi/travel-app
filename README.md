@@ -101,10 +101,23 @@ components/                                UI (server + client components)
   a preview; joining is an explicit POST from its Join button.
 - **Expenses.** `Expense` → `ExpenseSplit` (one share per participant) plus
   `Settlement` for recorded repayments. All money is stored as **integer
-  cents**; each trip has a single currency, and an expense's shares always sum
-  to its amount. A repayment can't exceed what the balances support, records
-  who entered it, and can be removed by the people involved, its recorder, or
-  the owner.
+  cents** (hundredths of the major unit, whatever the currency), and an
+  expense's shares always sum to its amount. Any member, viewers included,
+  can open an expense to see who paid and each person's share. A repayment
+  can't exceed what the balances support, records who entered it, and can be
+  removed by the people involved, its recorder, or the owner.
+- **One currency per trip, never converted.** It's picked when the trip is
+  created. Each currency has a *unit* in those hundredths
+  (`lib/currencies.ts`, derived from `Intl`): 1 for cent currencies, 100 for
+  zero-decimal ones like JPY, KRW, and VND. Expense amounts, shares,
+  repayments, and the budget must be whole units, and splits hand out whole
+  units — ¥1000 three ways is ¥334 + ¥333 + ¥333, never ¥333.33s. Balances
+  are rounded to whole units (sum-preserving) before settling up, which only
+  matters for fractional shares stored before this rule. Changing the
+  currency *relabels* amounts instead of converting them: that's silent only
+  while the trip holds no amounts; otherwise the owner confirms an example and
+  `updateTripCurrency` requires `relabel: true`. Switching to a zero-decimal
+  currency is refused while any amount has cents.
 - **Preferences, in two layers, asked at two moments.** `TravelProfile` is one
   row per *user* — durable taste (pace, budget tier, rhythm, lodging) that
   outlives any single trip. It's collected by the account-level deck at

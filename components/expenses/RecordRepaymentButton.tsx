@@ -12,6 +12,13 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui/form";
+import {
+  amountInputProps,
+  amountInputValue,
+  currencyUnitCents,
+  isWholeUnit,
+  parseAmountInput,
+} from "@/lib/currencies";
 import { formatCents } from "@/lib/format";
 import { canRecordRepayment } from "@/lib/permissions";
 import type { SuggestedPayment, TripRole } from "@/types";
@@ -55,7 +62,7 @@ export function RecordRepaymentButton({
         members.find((m) => m.id !== currentUserId)?.id ??
         "",
     );
-    setAmount(suggestion ? (suggestion.amountCents / 100).toFixed(2) : "");
+    setAmount(suggestion ? amountInputValue(suggestion.amountCents, currency) : "");
     setError(null);
     setOpen(true);
   }
@@ -64,10 +71,11 @@ export function RecordRepaymentButton({
     if (!pending) setOpen(false);
   }
 
-  const amountCents = Math.round((Number.parseFloat(amount) || 0) * 100);
+  const amountCents = parseAmountInput(amount);
+  const wholeUnits = isWholeUnit(amountCents, currency);
   const samePerson = fromUserId === toUserId;
   const allowed = canRecordRepayment(role, currentUserId, fromUserId, toUserId);
-  const ready = amountCents > 0 && !samePerson && allowed;
+  const ready = amountCents > 0 && wholeUnits && !samePerson && allowed;
 
   function submit() {
     startTransition(async () => {
@@ -158,10 +166,8 @@ export function RecordRepaymentButton({
             }
           >
             <input
-              type="number"
-              inputMode="decimal"
-              min="0.01"
-              step="0.01"
+              {...amountInputProps(currency)}
+              min={currencyUnitCents(currency) / 100}
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -170,6 +176,11 @@ export function RecordRepaymentButton({
             />
           </Field>
 
+          {!wholeUnits && (
+            <p className="text-sm text-red-700">
+              {currency} has no decimal places — enter a whole number.
+            </p>
+          )}
           {samePerson && (
             <p className="text-sm text-stone-600">
               Pick two different people.

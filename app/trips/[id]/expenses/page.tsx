@@ -13,6 +13,7 @@ import { AddExpenseButton } from "@/components/expenses/AddExpenseButton";
 import { BalancesPanel } from "@/components/expenses/BalancesPanel";
 import { CurrencyPicker } from "@/components/expenses/CurrencyPicker";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
+import { summarizeTripAmounts } from "@/lib/currencies";
 
 export default async function TripExpensesPage({
   params,
@@ -48,6 +49,12 @@ export default async function TripExpensesPage({
     id: m.userId,
     name: m.user.name ?? m.user.email,
   }));
+  const amounts = summarizeTripAmounts({
+    totalBudget: trip.totalBudget,
+    expenses: expensesRes.data,
+    settlementCents: settlementsRes.data.map((s) => s.amountCents),
+    activityCosts: trip.days.flatMap((d) => d.activities),
+  });
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -67,7 +74,8 @@ export default async function TripExpensesPage({
                 <CurrencyPicker
                   tripId={trip.id}
                   currency={trip.currency}
-                  hasExpenses={expensesRes.data.length > 0}
+                  example={amounts.example}
+                  fractional={amounts.fractional}
                 />
               )}
               {canEdit && currentUserId && (

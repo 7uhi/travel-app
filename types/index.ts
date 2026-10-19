@@ -269,6 +269,23 @@ export interface TripBalances {
   suggestedPayments: SuggestedPayment[];
 }
 
+/** A real amount from a trip, named so a confirmation can show what happens to it. */
+export interface TripAmountExample {
+  /** e.g. `“Dinner at Time Out”` or `the trip budget` */
+  label: string;
+  cents: number;
+}
+
+/** Options for updateTripCurrency. */
+export interface CurrencyChangeOptions {
+  /**
+   * Required once the trip holds any amount: the caller confirms those
+   * amounts keep their numbers under the new code rather than being
+   * converted.
+   */
+  relabel?: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /* Create payloads (id/timestamps assigned by the database).            */
 /* Nullable columns are also optional keys so form code can just        */
@@ -294,6 +311,9 @@ export interface TripInput {
   windowEnd?: string;
   /** Desired trip length in days */
   durationDays?: number;
+  /** ISO 4217 code from lib/currencies; defaults to USD. */
+  currency?: string;
+  /** In `currency`, major units; whole numbers for zero-decimal currencies. */
   totalBudget?: number | null;
 }
 

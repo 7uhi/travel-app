@@ -9,6 +9,11 @@ import type {
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
+import {
+  currencyUnitCents,
+  isWholeUnit,
+  wholeUnitsMessage,
+} from "@/lib/currencies";
 import { parseUtcDate } from "@/lib/dates";
 import { formatCents } from "@/lib/format";
 import { canRecordRepayment, canRemoveRepayment } from "@/lib/permissions";
@@ -24,6 +29,7 @@ import {
   checkSharesTotal,
   computeBalances,
   maxRepaymentCents,
+  roundBalances,
   simplifyDebts,
   splitByPercent,
   splitEqual,
@@ -61,8 +67,9 @@ const CATEGORIES: readonly ExpenseCategory[] = [
 /**
  * Creates an expense with its splits in one transaction. The caller must be
  * an OWNER or EDITOR member; the payer and every split participant must be
- * trip members; split amounts always sum exactly to the total (enforced by
- * lib/split.ts for EQUAL/PERCENT and validated for EXACT).
+ * trip members; the amount and every share are whole units of the trip's
+ * currency (whole yen in JPY); split amounts always sum exactly to the total
+ * (enforced by lib/split.ts for EQUAL/PERCENT and validated for EXACT).
  */
 export async function createExpense(
   tripId: string,
@@ -75,39 +82,50 @@ export async function createExpense(
   if (!data) return fail(INVALID_INPUT);
 
   try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: tripId },
-      select: {
-        currency: true,
-        members: { select: { userId: true, role: true } },
-      },
+    const outcome = await prisma.$transaction(async (tx): Promise<
+      { error: string } | { expense: ExpenseRow }
+    > => {
+      const currency = await lockTripCurrency(tx, tripId);
+      if (!currency) return { error: "Trip not found." };
+      const members = await tx.tripMember.findMany({
+        where: { tripId },
+        select: { userId: true, role: true },
+      });
+      const gate = editGate(members, userId, "add expenses");
+      if (gate) return { error: gate };
+
+      const memberIds = new Set(members.map((m) => m.userId));
+      const parsed = parseExpenseFields(data, memberIds, userId, currency);
+      if ("error" in parsed) return parsed;
+
+      const shares = resolveShares(
+        parsed.amountCents,
+        data.split,
+        memberIds,
+        currency,
+      );
+      if ("error" in shares) return shares;
+
+      return {
+        expense: await tx.expense.create({
+          data: {
+            tripId,
+            description: parsed.description,
+            amountCents: parsed.amountCents,
+            currency,
+            category: parsed.category,
+            date: parsed.date,
+            paidById: parsed.paidById,
+            splits: { create: shares.shares },
+          },
+          include: EXPENSE_INCLUDE,
+        }),
+      };
     });
-    const gate = editGate(trip?.members, userId, "add expenses");
-    if (gate) return fail(gate);
-
-    const memberIds = new Set(trip!.members.map((m) => m.userId));
-    const parsed = parseExpenseFields(data, memberIds, userId);
-    if ("error" in parsed) return fail(parsed.error);
-
-    const shares = resolveShares(parsed.amountCents, data.split, memberIds);
-    if ("error" in shares) return fail(shares.error);
-
-    const expense = await prisma.expense.create({
-      data: {
-        tripId,
-        description: parsed.description,
-        amountCents: parsed.amountCents,
-        currency: trip!.currency,
-        category: parsed.category,
-        date: parsed.date,
-        paidById: parsed.paidById,
-        splits: { create: shares.shares },
-      },
-      include: EXPENSE_INCLUDE,
-    });
+    if ("error" in outcome) return fail(outcome.error);
 
     revalidateTripPages(tripId);
-    return { success: true, data: serializeExpense(expense) };
+    return { success: true, data: serializeExpense(outcome.expense) };
   } catch (error) {
     console.error("createExpense failed:", error);
     return fail("Failed to add expense. Please try again.");
@@ -126,45 +144,54 @@ export async function updateExpense(
   if (!data) return fail(INVALID_INPUT);
 
   try {
-    const existing = await prisma.expense.findUnique({
-      where: { id: expenseId },
-      select: {
-        tripId: true,
-        paidById: true,
-        trip: {
-          select: {
-            currency: true,
-            members: { select: { userId: true, role: true } },
-          },
+    const outcome = await prisma.$transaction(async (tx): Promise<
+      { error: string } | { expense: ExpenseRow }
+    > => {
+      const existing = await tx.expense.findUnique({
+        where: { id: expenseId },
+        select: {
+          tripId: true,
+          paidById: true,
+          trip: { select: { members: { select: { userId: true, role: true } } } },
         },
-      },
+      });
+      const gate = payerOrOwnerGate(existing, userId, "edit");
+      if (gate) return { error: gate };
+      const currency = await lockTripCurrency(tx, existing!.tripId);
+      if (!currency) return { error: "Expense not found." };
+
+      const memberIds = new Set(existing!.trip.members.map((m) => m.userId));
+      const parsed = parseExpenseFields(data, memberIds, userId, currency);
+      if ("error" in parsed) return parsed;
+
+      const shares = resolveShares(
+        parsed.amountCents,
+        data.split,
+        memberIds,
+        currency,
+      );
+      if ("error" in shares) return shares;
+
+      // deleteMany + create inside one update = atomic split replacement
+      return {
+        expense: await tx.expense.update({
+          where: { id: expenseId },
+          data: {
+            description: parsed.description,
+            amountCents: parsed.amountCents,
+            category: parsed.category,
+            date: parsed.date,
+            paidById: parsed.paidById,
+            splits: { deleteMany: {}, create: shares.shares },
+          },
+          include: EXPENSE_INCLUDE,
+        }),
+      };
     });
-    const gate = payerOrOwnerGate(existing, userId, "edit");
-    if (gate) return fail(gate);
+    if ("error" in outcome) return fail(outcome.error);
 
-    const memberIds = new Set(existing!.trip.members.map((m) => m.userId));
-    const parsed = parseExpenseFields(data, memberIds, userId);
-    if ("error" in parsed) return fail(parsed.error);
-
-    const shares = resolveShares(parsed.amountCents, data.split, memberIds);
-    if ("error" in shares) return fail(shares.error);
-
-    // deleteMany + create inside one update = atomic split replacement
-    const expense = await prisma.expense.update({
-      where: { id: expenseId },
-      data: {
-        description: parsed.description,
-        amountCents: parsed.amountCents,
-        category: parsed.category,
-        date: parsed.date,
-        paidById: parsed.paidById,
-        splits: { deleteMany: {}, create: shares.shares },
-      },
-      include: EXPENSE_INCLUDE,
-    });
-
-    revalidateTripPages(existing!.tripId);
-    return { success: true, data: serializeExpense(expense) };
+    revalidateTripPages(outcome.expense.tripId);
+    return { success: true, data: serializeExpense(outcome.expense) };
   } catch (error) {
     console.error("updateExpense failed:", error);
     return fail("Failed to update expense. Please try again.");
@@ -206,11 +233,12 @@ export async function deleteExpense(
  * bank transfer). Either person involved may record it, as may an owner or
  * editor; see canRecordRepayment.
  *
- * The amount can't exceed what the balances currently support — what the
- * payer owes overall, capped by what the recipient is owed — so a repayment
- * can settle a debt but never flip it. Recording is serialized per trip by
- * locking the trip row, so two people recording the same suggested payment
- * from stale pages can't both succeed: the second sees the debt already gone.
+ * The amount must be a whole unit of the trip's currency and can't exceed
+ * what the (whole-unit) balances currently support — what the payer owes
+ * overall, capped by what the recipient is owed — so a repayment can settle a
+ * debt but never flip it. Recording is serialized per trip by locking the
+ * trip row, so two people recording the same suggested payment from stale
+ * pages can't both succeed: the second sees the debt already gone.
  */
 export async function recordSettlement(
   tripId: string,
@@ -242,6 +270,8 @@ export async function recordSettlement(
         select: {
           currency: true,
           members: {
+            // Join order, as in getTripBalances, so both round alike.
+            orderBy: { createdAt: "asc" },
             select: { userId: true, role: true, user: { select: { name: true } } },
           },
           expenses: {
@@ -270,10 +300,18 @@ export async function recordSettlement(
         };
       }
 
+      if (!isWholeUnit(amountCents, trip.currency)) {
+        return { error: wholeUnitsMessage("A repayment", trip.currency) };
+      }
+
       const fromName = from.user.name ?? "This member";
       const toName = to.user.name ?? "the other member";
       const max = maxRepaymentCents(
-        computeBalances({ expenses: trip.expenses, settlements: trip.settlements }),
+        roundBalances(
+          computeBalances({ expenses: trip.expenses, settlements: trip.settlements }),
+          currencyUnitCents(trip.currency),
+          trip.members.map((m) => m.userId),
+        ),
         fromUserId,
         toUserId,
       );
@@ -433,7 +471,8 @@ export async function getTripSpentCents(
 
 /**
  * Each member's net position (paid − owed, adjusted by settlements) plus the
- * greedy-simplified "who pays whom" list. Members only.
+ * greedy-simplified "who pays whom" list, both in whole units of the trip's
+ * currency (see roundBalances). Members only.
  */
 export async function getTripBalances(
   tripId: string,
@@ -471,10 +510,12 @@ export async function getTripBalances(
       return fail("Trip not found.");
     }
 
-    const balances = computeBalances({
-      expenses: trip.expenses,
-      settlements: trip.settlements,
-    });
+    const memberOrder = trip.members.map((m) => m.userId);
+    const balances = roundBalances(
+      computeBalances({ expenses: trip.expenses, settlements: trip.settlements }),
+      currencyUnitCents(trip.currency),
+      memberOrder,
+    );
 
     return {
       success: true,
@@ -488,10 +529,7 @@ export async function getTripBalances(
             netCents: balances.get(m.userId) ?? 0,
           }))
           .sort((a, b) => b.netCents - a.netCents),
-        suggestedPayments: simplifyDebts(
-          balances,
-          trip.members.map((m) => m.userId),
-        ),
+        suggestedPayments: simplifyDebts(balances, memberOrder),
       },
     };
   } catch (error) {
@@ -508,6 +546,24 @@ const EXPENSE_INCLUDE = {
   paidBy: true,
   splits: { include: { user: true } },
 } as const;
+
+type ExpenseRow = Prisma.ExpenseGetPayload<{ include: typeof EXPENSE_INCLUDE }>;
+
+/**
+ * Locks the trip row for the rest of the transaction and returns its
+ * currency (null when the trip doesn't exist), so amounts validated as whole
+ * units of that currency are written under it. updateTripCurrency takes the
+ * row FOR UPDATE and so waits for this KEY SHARE lock (and vice versa);
+ * expense writes never wait on each other.
+ */
+async function lockTripCurrency(
+  tx: Prisma.TransactionClient,
+  tripId: string,
+): Promise<string | null> {
+  const rows = await tx.$queryRaw<{ currency: string }[]>`
+    SELECT currency FROM "Trip" WHERE id = ${tripId} FOR KEY SHARE`;
+  return rows[0]?.currency ?? null;
+}
 
 /** Spending totals surface in every tab's header, so refresh all trip pages. */
 function revalidateTripPages(tripId: string): void {
@@ -553,6 +609,7 @@ function parseExpenseFields(
   data: ExpenseInput,
   memberIds: Set<string>,
   currentUser: string,
+  currency: string,
 ):
   | {
       description: string;
@@ -573,6 +630,9 @@ function parseExpenseFields(
   }
   if (data.amountCents > MAX_AMOUNT_CENTS) {
     return { error: "Amount is too large." };
+  }
+  if (!isWholeUnit(data.amountCents, currency)) {
+    return { error: wholeUnitsMessage("The amount", currency) };
   }
 
   if (!CATEGORIES.includes(data.category)) {
@@ -598,15 +658,17 @@ function parseExpenseFields(
 
 /**
  * Turns a split request into stored shares. Whatever the mode, the result is
- * checked against the final invariant (whole non-negative cents summing to
- * the total) before it can be written, so no rounding path can unbalance the
- * ledger.
+ * checked against the final invariant (whole non-negative units of the
+ * currency summing to the total) before it can be written, so no rounding
+ * path can unbalance the ledger or leave a fraction of a yen.
  */
 function resolveShares(
   amountCents: number,
   split: SplitInput,
   memberIds: Set<string>,
+  currency: string,
 ): { shares: Share[] } | { error: string } {
+  const unit = currencyUnitCents(currency);
   const checkMembers = (ids: string[]): string | null => {
     if (ids.length === 0) return "Pick at least one participant.";
     if (new Set(ids).size !== ids.length) {
@@ -624,13 +686,13 @@ function resolveShares(
       case "EQUAL": {
         const err = checkMembers(split.participantIds);
         if (err) return { error: err };
-        shares = splitEqual(amountCents, split.participantIds);
+        shares = splitEqual(amountCents, split.participantIds, unit);
         break;
       }
       case "EXACT": {
         const err =
           checkMembers(split.shares.map((s) => s.userId)) ??
-          validateExactShares(amountCents, split.shares);
+          validateExactShares(amountCents, split.shares, unit);
         if (err) return { error: err };
         shares = split.shares.map((s) => ({
           userId: s.userId,
@@ -641,7 +703,7 @@ function resolveShares(
       case "PERCENT": {
         const err = checkMembers(split.shares.map((s) => s.userId));
         if (err) return { error: err };
-        shares = splitByPercent(amountCents, split.shares);
+        shares = splitByPercent(amountCents, split.shares, unit);
         break;
       }
       default:
@@ -653,7 +715,7 @@ function resolveShares(
     };
   }
 
-  const err = checkSharesTotal(amountCents, shares);
+  const err = checkSharesTotal(amountCents, shares, unit);
   return err ? { error: err } : { shares };
 }
 

@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { X } from "lucide-react";
 
 import type { ActionResult } from "@/lib/action-result";
+import {
+  amountInputProps,
+  amountInputValue,
+  currencyUnitCents,
+  isWholeUnit,
+  parseAmountInput,
+} from "@/lib/currencies";
 import { formatCents } from "@/lib/format";
-import { prorate, splitEqual } from "@/lib/split";
+import { isEqualSplit, prorate, splitEqual } from "@/lib/split";
 import type {
   ExpenseCategory,
   ExpenseInput,
@@ -42,15 +49,19 @@ interface InitialState {
 
 /**
  * The split mode isn't stored, so infer it from the shares: an expense whose
- * shares differ by at most one cent (the rounding remainder of an equal
- * split) reopens in EQUAL mode; anything else reopens as exact amounts.
+ * shares differ by at most one unit (the rounding remainder of an equal
+ * split — a cent, or a yen in JPY) reopens in EQUAL mode; anything else
+ * reopens as exact amounts.
  */
 function initialStateFrom(
   expense: ExpenseWithDetails,
   members: Member[],
+  currency: string,
 ): InitialState {
-  const amounts = expense.splits.map((s) => s.amountCents);
-  const isEqual = Math.max(...amounts) - Math.min(...amounts) <= 1;
+  const isEqual = isEqualSplit(
+    expense.splits.map((s) => s.amountCents),
+    currencyUnitCents(currency),
+  );
 
   const participants = new Set(expense.splits.map((s) => s.userId));
   const excluded: Record<string, boolean> = {};
@@ -60,12 +71,12 @@ function initialStateFrom(
 
   const exactAmounts: Record<string, string> = {};
   for (const s of expense.splits) {
-    exactAmounts[s.userId] = (s.amountCents / 100).toFixed(2);
+    exactAmounts[s.userId] = amountInputValue(s.amountCents, currency);
   }
 
   return {
     description: expense.description,
-    amount: (expense.amountCents / 100).toFixed(2),
+    amount: amountInputValue(expense.amountCents, currency),
     date: expense.date.slice(0, 10),
     category: expense.category,
     paidById: expense.paidBy.id,
@@ -98,7 +109,9 @@ export function ExpenseDialog({
   onClose: () => void;
   onSubmit: (data: ExpenseInput) => Promise<ActionResult<unknown>>;
 }) {
-  const initial = expense ? initialStateFrom(expense, members) : null;
+  const initial = expense ? initialStateFrom(expense, members, currency) : null;
+  const unit = currencyUnitCents(currency);
+  const splitLabelId = useId();
 
   const [mode, setMode] = useState<Mode>(initial?.mode ?? "EQUAL");
   const [amount, setAmount] = useState(initial?.amount ?? "");
@@ -120,7 +133,7 @@ export function ExpenseDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const amountCents = Math.round((Number.parseFloat(amount) || 0) * 100);
+  const amountCents = parseAmountInput(amount);
 
   function close() {
     if (pending) return;
@@ -139,7 +152,7 @@ export function ExpenseDialog({
         .filter((m) => (exactAmounts[m.id] ?? "").trim() !== "")
         .map((m) => ({
           userId: m.id,
-          amountCents: Math.round(Number.parseFloat(exactAmounts[m.id]) * 100),
+          amountCents: parseAmountInput(exactAmounts[m.id]),
         }))
         .filter((s) => s.amountCents > 0);
       if (extrasCents > 0) {
@@ -147,12 +160,13 @@ export function ExpenseDialog({
           userId: s.userId,
           weightCents: s.amountCents,
         }));
-        const taxShares = taxCents > 0 ? prorate(taxCents, weights) : null;
+        const taxShares =
+          taxCents > 0 ? prorate(taxCents, weights, unit) : null;
         const tipShares =
           tipCents > 0
             ? tipMode === "EVEN"
-              ? splitEqual(tipCents, items.map((s) => s.userId))
-              : prorate(tipCents, weights)
+              ? splitEqual(tipCents, items.map((s) => s.userId), unit)
+              : prorate(tipCents, weights, unit)
             : null;
         return {
           mode,
@@ -197,10 +211,8 @@ export function ExpenseDialog({
     });
   }
 
-  const exactAssigned = members.reduce(
-    (sum, m) => sum + Math.round((Number.parseFloat(exactAmounts[m.id]) || 0) * 100),
-    0,
-  );
+  const exactCents = members.map((m) => parseAmountInput(exactAmounts[m.id] ?? ""));
+  const exactAssigned = exactCents.reduce((sum, cents) => sum + cents, 0);
   const percentTotal = members.reduce(
     (sum, m) => sum + (Number.parseFloat(percents[m.id]) || 0),
     0,
@@ -208,20 +220,27 @@ export function ExpenseDialog({
 
   // Save stays disabled until the split reconciles with the total, so
   // mismatches surface as live feedback instead of a server error.
-  const taxCents = Math.round((Number.parseFloat(tax) || 0) * 100);
-  const tipCents = Math.round((Number.parseFloat(tip) || 0) * 100);
+  const taxCents = parseAmountInput(tax);
+  const tipCents = parseAmountInput(tip);
   const extrasCents = taxCents + tipCents;
+  // A zero-decimal currency only takes whole numbers; "100.5" yen keeps
+  // Save disabled with the reason shown, rather than failing on the server.
+  const wholeUnits = [
+    amountCents,
+    ...(mode === "EXACT" ? [taxCents, tipCents, ...exactCents] : []),
+  ].every((cents) => isWholeUnit(cents, currency));
   // In EXACT mode the per-person inputs are item subtotals; they must add up
   // to the total minus tax and tip.
   const itemTargetCents = amountCents - extrasCents;
   const exactBalanced = itemTargetCents > 0 && exactAssigned === itemTargetCents;
   const percentBalanced = Math.abs(percentTotal - 100) <= 0.01;
   const splitReady =
-    mode === "EQUAL"
+    wholeUnits &&
+    (mode === "EQUAL"
       ? members.some((m) => !excluded[m.id])
       : mode === "EXACT"
         ? exactBalanced
-        : percentBalanced;
+        : percentBalanced);
   const fmtPercent = (n: number) => String(Math.round(n * 100) / 100);
 
   return (
@@ -263,11 +282,10 @@ export function ExpenseDialog({
             <Field label={`Amount (${currency})`}>
               <input
                 name="amount"
-                type="number"
-                min="0.01"
-                step="0.01"
+                {...amountInputProps(currency)}
+                min={unit / 100}
                 required
-                placeholder="90.00"
+                placeholder={unit === 1 ? "90.00" : "9000"}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className={inputClass}
@@ -315,7 +333,14 @@ export function ExpenseDialog({
             </Field>
           </div>
 
-          <Field label="Split">
+          {/* A group, not a Field: a <label> would name its first button. */}
+          <div role="group" aria-labelledby={splitLabelId}>
+            <span
+              id={splitLabelId}
+              className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500"
+            >
+              Split
+            </span>
             <div className="flex gap-1 rounded-xl bg-stone-100 p-1">
               {(
                 [
@@ -327,6 +352,7 @@ export function ExpenseDialog({
                 <button
                   key={value}
                   type="button"
+                  aria-pressed={mode === value}
                   onClick={() => setMode(value)}
                   className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
                     mode === value
@@ -338,16 +364,15 @@ export function ExpenseDialog({
                 </button>
               ))}
             </div>
-          </Field>
+          </div>
 
           {mode === "EXACT" && (
             <div className="grid grid-cols-2 gap-4">
               <Field label={`Tax (${currency}) · optional`}>
                 <input
-                  type="number"
+                  {...amountInputProps(currency)}
                   min="0"
-                  step="0.01"
-                  placeholder="0.00"
+                  placeholder={unit === 1 ? "0.00" : "0"}
                   value={tax}
                   onChange={(e) => setTax(e.target.value)}
                   className={inputClass}
@@ -356,10 +381,9 @@ export function ExpenseDialog({
               <div>
                 <Field label={`Tip (${currency}) · optional`}>
                   <input
-                    type="number"
+                    {...amountInputProps(currency)}
                     min="0"
-                    step="0.01"
-                    placeholder="0.00"
+                    placeholder={unit === 1 ? "0.00" : "0"}
                     value={tip}
                     onChange={(e) => setTip(e.target.value)}
                     className={inputClass}
@@ -416,10 +440,16 @@ export function ExpenseDialog({
                   <>
                     <span className="flex-1">{m.name}</span>
                     <input
-                      type="number"
+                      {...(mode === "EXACT"
+                        ? amountInputProps(currency)
+                        : { type: "number", step: "0.1", inputMode: "decimal" })}
                       min="0"
-                      step={mode === "EXACT" ? "0.01" : "0.1"}
-                      placeholder={mode === "EXACT" ? "0.00" : "0"}
+                      placeholder={mode === "EXACT" && unit === 1 ? "0.00" : "0"}
+                      aria-label={
+                        mode === "EXACT"
+                          ? `${m.name}'s amount in ${currency}`
+                          : `${m.name}'s percentage`
+                      }
                       value={
                         mode === "EXACT"
                           ? (exactAmounts[m.id] ?? "")
@@ -449,10 +479,17 @@ export function ExpenseDialog({
             {mode === "EQUAL" && (
               <p className="pt-1 text-xs text-stone-500">
                 {(() => {
-                  const n = members.filter((m) => !excluded[m.id]).length;
-                  return n > 0 && amountCents > 0
-                    ? `≈ ${formatCents(Math.floor(amountCents / n), currency)} each · ${n} ${n === 1 ? "person" : "people"}`
-                    : `${n} ${n === 1 ? "person" : "people"} selected`;
+                  const ids = members.filter((m) => !excluded[m.id]).map((m) => m.id);
+                  const people = `${ids.length} ${ids.length === 1 ? "person" : "people"}`;
+                  if (ids.length === 0 || amountCents <= 0 || !wholeUnits) {
+                    return `${people} selected`;
+                  }
+                  const shares = splitEqual(amountCents, ids, unit).map(
+                    (s) => s.amountCents,
+                  );
+                  const low = Math.min(...shares);
+                  const high = Math.max(...shares);
+                  return `${formatCents(low, currency)}${high > low ? `–${formatCents(high, currency)}` : ""} each · ${people}`;
                 })()}
               </p>
             )}
@@ -513,6 +550,11 @@ export function ExpenseDialog({
             )}
           </div>
 
+          {!wholeUnits && (
+            <p className="text-sm text-red-700">
+              {currency} has no decimal places — enter whole numbers.
+            </p>
+          )}
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
