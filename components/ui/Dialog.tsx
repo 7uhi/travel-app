@@ -74,10 +74,12 @@ export function Dialog({
      * click or typing in between) close the modal without a cancelable
      * cancel event, so onCancel can't veto it. Any close we didn't start is
      * undone and routed through onClose instead, so a parent that's mid-save
-     * still gets to keep the dialog open.
+     * still gets to keep the dialog open. The close event is queued, so one
+     * that arrives after the dialog was shown again (Strict Mode's mount,
+     * cleanup, mount) is stale and ignored.
      */
     const onNativeClose = () => {
-      if (!dialog.isConnected) return;
+      if (!dialog.isConnected || dialog.open) return;
       show();
       onCloseRef.current();
     };
