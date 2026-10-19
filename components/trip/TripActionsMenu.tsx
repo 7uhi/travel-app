@@ -33,20 +33,25 @@ type DialogKind = "edit" | "dates" | "members" | "leave" | "delete";
  * The hero's "…" menu: everything you can do to the trip itself, filtered to
  * what the viewer's role allows (each action re-checks on the server). A
  * plain disclosure rather than an ARIA menu — a short list of buttons that
- * closes on Escape, on outside clicks, and once an item is chosen.
+ * takes focus when it opens, and closes on Escape (handing focus back to the
+ * trigger), on outside clicks, when focus tabs out of it, and once an item is
+ * chosen.
  */
 export function TripActionsMenu({ trip }: { trip: TripHeaderData }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveStatus, setArchiveStatus] = useState("");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
   useEffect(() => {
     if (!open) return;
+    panel.current?.querySelector<HTMLElement>("button")?.focus();
     function onPointerDown(event: PointerEvent) {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -63,20 +68,30 @@ export function TripActionsMenu({ trip }: { trip: TripHeaderData }) {
     };
   }, [open]);
 
+  /*
+   * The chosen item unmounts with the panel, which would drop focus to the
+   * page body. Parking it on the trigger first gives the dialog an opener to
+   * hand focus back to when it closes.
+   */
   function choose(kind: DialogKind) {
     setOpen(false);
+    trigger.current?.focus();
     setDialog(kind);
   }
 
   function toggleArchived() {
+    const hiding = trip.archivedAt === null;
     setOpen(false);
+    trigger.current?.focus();
     setArchiveError(null);
+    setArchiveStatus("");
     startTransition(async () => {
-      const result = await setTripArchived(trip.id, trip.archivedAt === null);
+      const result = await setTripArchived(trip.id, hiding);
       if (!result.success) {
         setArchiveError(result.error);
         return;
       }
+      setArchiveStatus(hiding ? "Hidden from your trips." : "Back in your trips.");
       router.refresh();
     });
   }
@@ -85,25 +100,38 @@ export function TripActionsMenu({ trip }: { trip: TripHeaderData }) {
   const closeDialog = () => setDialog(null);
 
   return (
-    <div ref={wrapper} className="relative">
+    <div
+      ref={wrapper}
+      className="relative"
+      onBlur={(event) => {
+        // relatedTarget is null when the window itself loses focus; only a
+        // move to another element on the page should close the menu.
+        const next = event.relatedTarget;
+        if (open && next && !event.currentTarget.contains(next)) setOpen(false);
+      }}
+    >
+      {/* aria-disabled rather than disabled while hiding the trip: a disabled
+          button drops focus, and focus was just parked here. */}
       <button
         ref={trigger}
         type="button"
         onClick={() => {
+          if (pending) return;
           setArchiveError(null);
           setOpen((value) => !value);
         }}
         aria-expanded={open}
         aria-controls={panelId}
         aria-label="Trip options"
-        disabled={pending}
-        className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-white/25 bg-white/15 backdrop-blur transition-colors hover:bg-white/25 disabled:opacity-60"
+        aria-disabled={pending || undefined}
+        className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-white/25 bg-white/15 backdrop-blur transition-colors hover:bg-white/25 aria-disabled:opacity-60"
       >
         <MoreHorizontal size={16} aria-hidden />
       </button>
 
       {open && (
         <div
+          ref={panel}
           id={panelId}
           className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl bg-white py-1.5 text-ink shadow-xl ring-1 ring-stone-200"
         >
@@ -140,6 +168,9 @@ export function TripActionsMenu({ trip }: { trip: TripHeaderData }) {
         </div>
       )}
 
+      <p role="status" className="sr-only">
+        {archiveStatus}
+      </p>
       {archiveError && (
         <p
           role="alert"

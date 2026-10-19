@@ -1,8 +1,16 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
-import { X } from "lucide-react";
+import { useState, useTransition } from "react";
 
+import { Dialog } from "@/components/ui/Dialog";
+import {
+  Field,
+  FormError,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/components/ui/form";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type { ActionResult } from "@/lib/action-result";
 import {
   amountInputProps,
@@ -111,7 +119,6 @@ export function ExpenseDialog({
 }) {
   const initial = expense ? initialStateFrom(expense, members, currency) : null;
   const unit = currencyUnitCents(currency);
-  const splitLabelId = useId();
 
   const [mode, setMode] = useState<Mode>(initial?.mode ?? "EQUAL");
   const [amount, setAmount] = useState(initial?.amount ?? "");
@@ -244,240 +251,188 @@ export function ExpenseDialog({
   const fmtPercent = (n: number) => String(Math.round(n * 100) / 100);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-      onClick={close}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="font-display text-2xl">{title}</h2>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close"
-            className="rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-ink"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Dialog open onClose={close} title={title} size="lg">
+      <form action={submit} className="space-y-4">
+        <Field label="Description">
+          <input
+            name="description"
+            required
+            placeholder="Dinner at Time Out Market"
+            defaultValue={initial?.description}
+            className={inputClass}
+            data-autofocus
+          />
+        </Field>
 
-        <form action={submit} className="space-y-4">
-          <Field label="Description">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label={`Amount (${currency})`}>
             <input
-              name="description"
+              name="amount"
+              {...amountInputProps(currency)}
+              min={unit / 100}
               required
-              placeholder="Dinner at Time Out Market"
-              defaultValue={initial?.description}
+              placeholder={unit === 1 ? "90.00" : "9000"}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
               className={inputClass}
             />
           </Field>
+          <Field label="Date">
+            <input
+              name="date"
+              type="date"
+              required
+              defaultValue={
+                initial?.date ?? new Date().toISOString().slice(0, 10)
+              }
+              className={inputClass}
+            />
+          </Field>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={`Amount (${currency})`}>
-              <input
-                name="amount"
-                {...amountInputProps(currency)}
-                min={unit / 100}
-                required
-                placeholder={unit === 1 ? "90.00" : "9000"}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Date">
-              <input
-                name="date"
-                type="date"
-                required
-                defaultValue={
-                  initial?.date ?? new Date().toISOString().slice(0, 10)
-                }
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Category">
-              <select
-                name="category"
-                defaultValue={initial?.category}
-                className={inputClass}
-              >
-                {CATEGORY_OPTIONS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Paid by">
-              <select
-                name="paidById"
-                defaultValue={initial?.paidById ?? currentUserId}
-                className={inputClass}
-              >
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.id === currentUserId ? `${m.name} (you)` : m.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          {/* A group, not a Field: a <label> would name its first button. */}
-          <div role="group" aria-labelledby={splitLabelId}>
-            <span
-              id={splitLabelId}
-              className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500"
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Category">
+            <select
+              name="category"
+              defaultValue={initial?.category}
+              className={inputClass}
             >
-              Split
-            </span>
-            <div className="flex gap-1 rounded-xl bg-stone-100 p-1">
-              {(
-                [
-                  ["EQUAL", "Equally"],
-                  ["EXACT", "Exact amounts"],
-                  ["PERCENT", "Percentages"],
-                ] as [Mode, string][]
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={mode === value}
-                  onClick={() => setMode(value)}
-                  className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
-                    mode === value
-                      ? "bg-white text-ink shadow-sm"
-                      : "text-stone-500 hover:text-ink"
-                  }`}
-                >
-                  {label}
-                </button>
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
               ))}
-            </div>
-          </div>
+            </select>
+          </Field>
+          <Field label="Paid by">
+            <select
+              name="paidById"
+              defaultValue={initial?.paidById ?? currentUserId}
+              className={inputClass}
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id === currentUserId ? `${m.name} (you)` : m.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
 
-          {mode === "EXACT" && (
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={`Tax (${currency}) · optional`}>
+        <SegmentedControl
+          legend="Split"
+          showLegend
+          options={[
+            ["EQUAL", "Equally"],
+            ["EXACT", "Exact amounts"],
+            ["PERCENT", "Percentages"],
+          ]}
+          value={mode}
+          onChange={setMode}
+          size="sm"
+        />
+
+        {mode === "EXACT" && (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={`Tax (${currency}) · optional`}>
+              <input
+                {...amountInputProps(currency)}
+                min="0"
+                placeholder={unit === 1 ? "0.00" : "0"}
+                value={tax}
+                onChange={(e) => setTax(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <div>
+              <Field label={`Tip (${currency}) · optional`}>
                 <input
                   {...amountInputProps(currency)}
                   min="0"
                   placeholder={unit === 1 ? "0.00" : "0"}
-                  value={tax}
-                  onChange={(e) => setTax(e.target.value)}
+                  value={tip}
+                  onChange={(e) => setTip(e.target.value)}
                   className={inputClass}
                 />
               </Field>
-              <div>
-                <Field label={`Tip (${currency}) · optional`}>
-                  <input
-                    {...amountInputProps(currency)}
-                    min="0"
-                    placeholder={unit === 1 ? "0.00" : "0"}
-                    value={tip}
-                    onChange={(e) => setTip(e.target.value)}
-                    className={inputClass}
-                  />
-                </Field>
-                <div
-                  role="group"
-                  aria-label="How to split the tip"
-                  className="mt-1.5 flex gap-1 rounded-lg bg-stone-100 p-0.5"
-                >
-                  {(
-                    [
-                      ["BY_ITEMS", "By items"],
-                      ["EVEN", "Evenly"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setTipMode(value)}
-                      className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-                        tipMode === value
-                          ? "bg-white text-ink shadow-sm"
-                          : "text-stone-500 hover:text-ink"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <SegmentedControl
+                legend="How to split the tip"
+                options={[
+                  ["BY_ITEMS", "By items"],
+                  ["EVEN", "Evenly"],
+                ]}
+                value={tipMode}
+                onChange={setTipMode}
+                size="sm"
+                className="mt-1.5"
+              />
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="space-y-2 rounded-xl border border-stone-200 p-3">
-            {members.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 text-sm">
-                {mode === "EQUAL" ? (
-                  <label className="flex flex-1 cursor-pointer items-center gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={!excluded[m.id]}
-                      onChange={(e) =>
-                        setExcluded((prev) => ({
-                          ...prev,
-                          [m.id]: !e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 accent-pine"
-                    />
-                    {m.name}
-                  </label>
-                ) : (
-                  <>
-                    <span className="flex-1">{m.name}</span>
-                    <input
-                      {...(mode === "EXACT"
-                        ? amountInputProps(currency)
-                        : { type: "number", step: "0.1", inputMode: "decimal" })}
-                      min="0"
-                      placeholder={mode === "EXACT" && unit === 1 ? "0.00" : "0"}
-                      aria-label={
-                        mode === "EXACT"
-                          ? `${m.name}'s amount in ${currency}`
-                          : `${m.name}'s percentage`
-                      }
-                      value={
-                        mode === "EXACT"
-                          ? (exactAmounts[m.id] ?? "")
-                          : (percents[m.id] ?? "")
-                      }
-                      onChange={(e) =>
-                        mode === "EXACT"
-                          ? setExactAmounts((prev) => ({
-                              ...prev,
-                              [m.id]: e.target.value,
-                            }))
-                          : setPercents((prev) => ({
-                              ...prev,
-                              [m.id]: e.target.value,
-                            }))
-                      }
-                      className="w-24 rounded-lg border border-stone-200 px-2 py-1 text-right text-sm outline-none focus:border-pine"
-                    />
-                    <span className="w-4 text-xs text-stone-400">
-                      {mode === "PERCENT" ? "%" : ""}
-                    </span>
-                  </>
-                )}
-              </div>
-            ))}
+        <div className="space-y-2 rounded-xl border border-stone-200 p-3">
+          {members.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 text-sm">
+              {mode === "EQUAL" ? (
+                <label className="flex flex-1 cursor-pointer items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={!excluded[m.id]}
+                    onChange={(e) =>
+                      setExcluded((prev) => ({
+                        ...prev,
+                        [m.id]: !e.target.checked,
+                      }))
+                    }
+                    className="h-4 w-4 accent-pine"
+                  />
+                  {m.name}
+                </label>
+              ) : (
+                <>
+                  <span className="flex-1">{m.name}</span>
+                  <input
+                    {...(mode === "EXACT"
+                      ? amountInputProps(currency)
+                      : { type: "number", step: "0.1", inputMode: "decimal" })}
+                    min="0"
+                    placeholder={mode === "EXACT" && unit === 1 ? "0.00" : "0"}
+                    aria-label={
+                      mode === "EXACT"
+                        ? `${m.name}'s amount in ${currency}`
+                        : `${m.name}'s percentage`
+                    }
+                    value={
+                      mode === "EXACT"
+                        ? (exactAmounts[m.id] ?? "")
+                        : (percents[m.id] ?? "")
+                    }
+                    onChange={(e) =>
+                      mode === "EXACT"
+                        ? setExactAmounts((prev) => ({
+                            ...prev,
+                            [m.id]: e.target.value,
+                          }))
+                        : setPercents((prev) => ({
+                            ...prev,
+                            [m.id]: e.target.value,
+                          }))
+                    }
+                    className="w-24 rounded-lg border border-stone-300 px-2 py-1 text-right text-sm outline-none focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30"
+                  />
+                  <span aria-hidden className="w-4 text-xs text-stone-600">
+                    {mode === "PERCENT" ? "%" : ""}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
 
+          {/* A live region, so the running total is read out as shares
+              change: it's what says why Save is still disabled. */}
+          <div role="status">
             {mode === "EQUAL" && (
-              <p className="pt-1 text-xs text-stone-500">
+              <p className="pt-1 text-xs text-stone-600">
                 {(() => {
                   const ids = members.filter((m) => !excluded[m.id]).map((m) => m.id);
                   const people = `${ids.length} ${ids.length === 1 ? "person" : "people"}`;
@@ -505,7 +460,7 @@ export function ExpenseDialog({
                       ? "text-pine"
                       : exactAssigned > itemTargetCents
                         ? "text-red-600"
-                        : "text-stone-500"
+                        : "text-stone-600"
                   }`}
                 >
                   {extrasCents > 0 ? "Items assigned" : "Assigned"}{" "}
@@ -537,7 +492,7 @@ export function ExpenseDialog({
                     ? "text-pine"
                     : percentTotal > 100
                       ? "text-red-600"
-                      : "text-stone-500"
+                      : "text-stone-600"
                 }`}
               >
                 Total {fmtPercent(percentTotal)}% of 100%
@@ -549,56 +504,28 @@ export function ExpenseDialog({
               </p>
             )}
           </div>
+        </div>
 
-          {!wholeUnits && (
-            <p className="text-sm text-red-700">
-              {currency} has no decimal places — enter whole numbers.
-            </p>
-          )}
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          )}
+        {!wholeUnits && (
+          <p role="alert" className="text-sm text-red-700">
+            {currency} has no decimal places — enter whole numbers.
+          </p>
+        )}
+        <FormError message={error} />
 
-          <div className="flex justify-end gap-3 pt-1">
-            <button
-              type="button"
-              onClick={close}
-              className="rounded-full px-4 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={pending || !splitReady}
-              className="rounded-full bg-pine px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-dark disabled:opacity-60"
-            >
-              {pending ? pendingLabel : submitLabel}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-const inputClass =
-  "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine";
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
-        {label}
-      </span>
-      {children}
-    </label>
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" onClick={close} className={secondaryButtonClass}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={pending || !splitReady}
+            className={primaryButtonClass}
+          >
+            {pending ? pendingLabel : submitLabel}
+          </button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

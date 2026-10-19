@@ -80,7 +80,7 @@ export function GroupConsensusPanel({
           )}
 
           {group.interests.some((i) => i.vetoed) && (
-            <p className="mt-3 text-xs text-stone-400">
+            <p className="mt-3 text-xs text-stone-500">
               Keep off the plan:{" "}
               {group.interests
                 .filter((i) => i.vetoed)
@@ -94,7 +94,7 @@ export function GroupConsensusPanel({
             {group.budgetTier && (
               <Row label="Budget ceiling">
                 {group.budgetTier}{" "}
-                <span className="whitespace-nowrap text-stone-400">
+                <span className="whitespace-nowrap text-stone-500">
                   (lowest answer)
                 </span>
               </Row>
@@ -153,7 +153,7 @@ export function GroupConsensusPanel({
               {groupTrip.maxTravelHours !== null && (
                 <Row label="Max travel">
                   {groupTrip.maxTravelHours}h{" "}
-                  <span className="whitespace-nowrap text-stone-400">
+                  <span className="whitespace-nowrap text-stone-500">
                     (strictest answer)
                   </span>
                 </Row>
@@ -194,7 +194,7 @@ function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-stone-400">{label}</dt>
+      <dt className="text-stone-500">{label}</dt>
       <dd className="text-right text-ink">{children}</dd>
     </div>
   );

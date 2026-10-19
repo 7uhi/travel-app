@@ -24,6 +24,13 @@ export type TripTab =
  * Shared top section of every trip page: breadcrumb, hero, stat cards, and
  * the tab navigation between sections. Renders only from TripHeaderData
  * (getTripHeader), so every tab shows the same figures for the same trip.
+ *
+ * Only the Itinerary tab is the overview. Below the sm breakpoint the other
+ * tabs get a compact header — title, destination and dates, the trip's
+ * controls, then the tabs — because the full one pushed each task a whole
+ * phone screen down. It's the same markup with static parts hidden rather
+ * than a second header: every control (and the dialog it owns) stays
+ * mounted, so turning a phone sideways never hides an open dialog.
  */
 export function TripHeader({
   trip,
@@ -49,6 +56,10 @@ export function TripHeader({
       ? Math.round((trip.plannedDayCount / trip.dayCount) * 100)
       : 0;
   const canEditDetails = canEditTripDetails(trip.role);
+  const compact = activeTab !== "itinerary";
+  /** Mobile classes for the compact header; both must agree from sm up. */
+  const layout = (compactClass: string, fullClass: string) =>
+    compact ? compactClass : fullClass;
 
   // "Lisbon, Portugal" → "Lisbon"; null while the destination is undecided.
   const destinationShort = trip.destination?.split(",")[0].trim() ?? null;
@@ -100,19 +111,28 @@ export function TripHeader({
 
   return (
     <>
-      <nav className="mb-4 text-sm text-stone-500">
+      <nav aria-label="Breadcrumb" className="mb-4 text-sm text-stone-600">
         <Link href="/trips" className="transition-colors hover:text-pine">
           Trips
         </Link>
-        <span className="mx-2 text-stone-300">/</span>
+        <span aria-hidden className="mx-2 text-stone-400">
+          /
+        </span>
         <span className="text-stone-700">{trip.title}</span>
       </nav>
 
       {/* Hero. No overflow clipping: the trip options menu opens below it. */}
-      <section className="relative rounded-3xl bg-[linear-gradient(135deg,#e29a5b_0%,#c06b5e_45%,#54314e_100%)] px-6 py-8 text-white sm:px-10 sm:py-12">
+      <section
+        className={`relative bg-[linear-gradient(135deg,#e29a5b_0%,#c06b5e_45%,#54314e_100%)] text-white sm:rounded-3xl sm:px-10 sm:py-12 ${layout(
+          "rounded-2xl px-4 py-4",
+          "rounded-3xl px-6 py-8",
+        )}`}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur">
+            <span
+              className={`rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur ${layout("hidden sm:block", "")}`}
+            >
               {statusChip}
             </span>
             {trip.archivedAt && (
@@ -143,12 +163,21 @@ export function TripHeader({
           </span>
         </div>
 
-        <div className="mt-14 flex flex-wrap items-end justify-between gap-6 sm:mt-20">
+        <div
+          className={`flex flex-wrap items-end justify-between gap-6 sm:mt-20 ${layout("mt-3", "mt-14")}`}
+        >
           <div>
-            <h1 className="font-display text-4xl tracking-tight sm:text-5xl">
+            <h1
+              className={`font-display tracking-tight sm:text-5xl ${layout("text-3xl", "text-4xl")}`}
+            >
               {trip.title}
             </h1>
-            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/90">
+            <div
+              className={`flex flex-wrap items-center text-sm text-white/90 sm:mt-4 sm:gap-x-5 sm:gap-y-2 ${layout(
+                "mt-2 gap-x-4 gap-y-1",
+                "mt-4 gap-x-5 gap-y-2",
+              )}`}
+            >
               <span className="flex items-center gap-1.5">
                 <MapPin size={15} className="text-white/70" />
                 {trip.destination ?? "Destination TBD"}
@@ -168,7 +197,9 @@ export function TripHeader({
                     ? `Sometime ${formatDateRange(trip.windowStart, trip.windowEnd)}`
                     : "Dates TBD"}
               </span>
-              <span className="flex items-center gap-1.5">
+              <span
+                className={`items-center gap-1.5 ${layout("hidden sm:flex", "flex")}`}
+              >
                 <Sun size={15} className="text-white/70" />
                 {scheduled
                   ? `${trip.dayCount} ${trip.dayCount === 1 ? "day" : "days"}`
@@ -185,7 +216,9 @@ export function TripHeader({
             </div>
           </div>
 
-          <div className="w-full max-w-[220px]">
+          <div
+            className={`w-full max-w-[220px] ${layout("hidden sm:block", "")}`}
+          >
             {scheduled ? (
               <>
                 <p className="mb-2 text-right text-xs font-medium text-white/85">
@@ -210,7 +243,9 @@ export function TripHeader({
       </section>
 
       {/* Stat cards */}
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section
+        className={`mt-6 gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${layout("hidden", "grid")}`}
+      >
         <StatCard label="Countdown">
           {status === "planning" ? (
             <>
@@ -313,7 +348,10 @@ export function TripHeader({
       </section>
 
       {showTabs && (
-        <nav className="mt-8 flex flex-wrap gap-2" aria-label="Trip sections">
+        <nav
+          className={`flex flex-wrap gap-2 sm:mt-8 ${layout("mt-4", "mt-8")}`}
+          aria-label="Trip sections"
+        >
           <TabLink href={`/trips/${trip.id}`} active={activeTab === "itinerary"}>
             Itinerary
           </TabLink>

@@ -61,6 +61,8 @@ function ShareDialog({
   const [invites, setInvites] = useState<ActiveInvite[] | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Read out after a link is created or revoked; neither moves focus.
+  const [status, setStatus] = useState("");
   const [creating, startCreate] = useTransition();
   const [revokePending, startRevoke] = useTransition();
   const pending = creating || revokePending;
@@ -77,6 +79,7 @@ function ShareDialog({
 
   function create() {
     setError(null);
+    setStatus("");
     startCreate(async () => {
       const result = await createInvite(tripId, role);
       if (!result.success) {
@@ -84,12 +87,16 @@ function ShareDialog({
         return;
       }
       setCreated(result.data);
+      setStatus(
+        `${result.data.role === "EDITOR" ? "Editor" : "Viewer"} link created.`,
+      );
       await load();
     });
   }
 
   function revoke(inviteId: string) {
     setError(null);
+    setStatus("");
     startRevoke(async () => {
       const result = await revokeInvite(inviteId);
       if (!result.success) {
@@ -97,6 +104,7 @@ function ShareDialog({
         return;
       }
       setRevoking(null);
+      setStatus("Link revoked.");
       if (invites?.some((i) => i.id === inviteId && i.url === created?.url)) {
         setCreated(null);
       }
@@ -254,6 +262,9 @@ function ShareDialog({
         </section>
 
         <FormError message={error} />
+        <p role="status" className="sr-only">
+          {status}
+        </p>
 
         <p className="text-xs text-stone-600">
           Revoking a link doesn&apos;t remove anyone who already joined — the
@@ -279,20 +290,25 @@ function CopyButton({ url, compact = false }: { url: string; compact?: boolean }
   }
 
   return (
-    <button
-      type="button"
-      onClick={copy}
-      aria-label={compact ? "Copy link" : undefined}
-      className={
-        compact
-          ? "shrink-0 rounded-full p-1.5 text-stone-600 transition-colors hover:bg-stone-100 hover:text-ink"
-          : "flex shrink-0 items-center gap-1.5 rounded-full bg-pine px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-pine-dark"
-      }
-    >
-      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-      {!compact && (copied ? "Copied" : "Copy")}
-      {compact && copied && <span className="sr-only">Copied</span>}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={compact ? "Copy link" : undefined}
+        className={
+          compact
+            ? "shrink-0 rounded-full p-1.5 text-stone-600 transition-colors hover:bg-stone-100 hover:text-ink"
+            : "flex shrink-0 items-center gap-1.5 rounded-full bg-pine px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-pine-dark"
+        }
+      >
+        {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+        {!compact && (copied ? "Copied" : "Copy")}
+      </button>
+      {/* Outside the button, so it isn't folded into the button's name. */}
+      <span role="status" className="sr-only">
+        {copied ? "Link copied" : ""}
+      </span>
+    </>
   );
 }
 
