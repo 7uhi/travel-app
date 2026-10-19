@@ -15,5 +15,10 @@ next-env.d.ts
 # python venv accidentally created here
 myenv/
 
+# playwright
+/test-results/
+/playwright-report/
+/e2e/.auth/
+
 # misc
 .DS_Store
