@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { CalendarDays, MapPin, Sun } from "lucide-react";
+import { CalendarDays, EyeOff, MapPin, Sun } from "lucide-react";
 
 import { EditBudgetButton } from "@/components/EditBudgetButton";
 import { ShareTripButton } from "@/components/ShareTripButton";
+import { MembersButton } from "@/components/trip/MembersButton";
+import { SetDestinationButton } from "@/components/trip/SetDestinationButton";
+import { TripActionsMenu } from "@/components/trip/TripActionsMenu";
 import { formatCurrency, formatDateRange, formatDayDate } from "@/lib/format";
+import { canCreateInvite, canEditTripDetails } from "@/lib/permissions";
 import { tripStatus } from "@/lib/trip-status";
-import type { TripRole, TripWithDays } from "@/types";
+import type { TripHeaderData } from "@/types";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -18,33 +22,27 @@ export type TripTab =
 
 /**
  * Shared top section of every trip page: breadcrumb, hero, stat cards, and
- * the tab navigation between the itinerary and expenses views.
+ * the tab navigation between sections. Renders only from TripHeaderData
+ * (getTripHeader), so every tab shows the same figures for the same trip.
  */
 export function TripHeader({
   trip,
-  currentUserRole = null,
   activeTab = "itinerary",
   showTabs = true,
   respondedCount = null,
-  spentCents = null,
 }: {
-  trip: TripWithDays;
-  currentUserRole?: TripRole | null;
+  trip: TripHeaderData;
   activeTab?: TripTab;
   showTabs?: boolean;
   /** Members who marked availability; only shown while the trip is unscheduled. */
   respondedCount?: number | null;
-  /** Total logged expenses; null when the page didn't load spending. */
-  spentCents?: number | null;
 }) {
-  const activities = trip.days.flatMap((day) => day.activities);
-  const plannedCost = activities.reduce((sum, a) => sum + (a.cost ?? 0), 0);
-  const daysWithPlans = trip.days.filter((d) => d.activities.length > 0).length;
-  const openDays = trip.days.length - daysWithPlans;
+  const openDays = trip.dayCount - trip.plannedDayCount;
   const plannedPct =
-    trip.days.length > 0
-      ? Math.round((daysWithPlans / trip.days.length) * 100)
+    trip.dayCount > 0
+      ? Math.round((trip.plannedDayCount / trip.dayCount) * 100)
       : 0;
+  const canEditDetails = canEditTripDetails(trip.role);
 
   // "Lisbon, Portugal" → "Lisbon"; null while the destination is undecided.
   const destinationShort = trip.destination?.split(",")[0].trim() ?? null;
@@ -65,14 +63,15 @@ export function TripHeader({
       : status === "upcoming"
         ? `Upcoming · in ${daysToGo} ${daysToGo === 1 ? "day" : "days"}`
         : status === "ongoing"
-          ? `Happening now · day ${currentDayNumber} of ${trip.days.length}`
+          ? `Happening now · day ${currentDayNumber} of ${trip.dayCount}`
           : "Past trip";
 
   // The budget card leads with the plan before the trip and with actual
   // spending once it's underway; the other figure becomes the secondary line.
   // Exception: with no costs planned, a "$0 planned" headline would bury real
   // spending, so spending leads whenever it's the only signal.
-  const spent = spentCents !== null ? spentCents / 100 : null;
+  const plannedCost = trip.plannedCost;
+  const spent = trip.spentCents !== null ? trip.spentCents / 100 : null;
   const primaryIsSpent =
     spent !== null &&
     (status === "ongoing" ||
@@ -103,14 +102,24 @@ export function TripHeader({
         <span className="text-stone-700">{trip.title}</span>
       </nav>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#e29a5b_0%,#c06b5e_45%,#54314e_100%)] px-6 py-8 text-white sm:px-10 sm:py-12">
+      {/* Hero. No overflow clipping: the trip options menu opens below it. */}
+      <section className="relative rounded-3xl bg-[linear-gradient(135deg,#e29a5b_0%,#c06b5e_45%,#54314e_100%)] px-6 py-8 text-white sm:px-10 sm:py-12">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <span className="rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur">
-            {statusChip}
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur">
+              {statusChip}
+            </span>
+            {trip.archivedAt && (
+              <span className="flex items-center gap-1.5 rounded-full bg-black/20 px-3 py-1.5 text-xs font-medium">
+                <EyeOff size={12} aria-hidden />
+                Hidden from your trips
+              </span>
+            )}
           </span>
-          <span className="flex items-center gap-2">
-            {currentUserRole === "OWNER" ? (
+          {/* ml-auto keeps the actions (and the menu anchored to them) on the
+              right edge even when they wrap below the status chip. */}
+          <span className="ml-auto flex items-center gap-2">
+            {trip.role === "OWNER" ? (
               <EditBudgetButton
                 tripId={trip.id}
                 totalBudget={trip.totalBudget}
@@ -123,9 +132,8 @@ export function TripHeader({
                 </span>
               )
             )}
-            {currentUserRole === "OWNER" && (
-              <ShareTripButton tripId={trip.id} />
-            )}
+            {canCreateInvite(trip.role) && <ShareTripButton tripId={trip.id} />}
+            <TripActionsMenu trip={trip} />
           </span>
         </div>
 
@@ -138,6 +146,13 @@ export function TripHeader({
               <span className="flex items-center gap-1.5">
                 <MapPin size={15} className="text-white/70" />
                 {trip.destination ?? "Destination TBD"}
+                {trip.destination === null && canEditDetails && (
+                  <SetDestinationButton
+                    tripId={trip.id}
+                    title={trip.title}
+                    tone="hero"
+                  />
+                )}
               </span>
               <span className="flex items-center gap-1.5">
                 <CalendarDays size={15} className="text-white/70" />
@@ -150,9 +165,10 @@ export function TripHeader({
               <span className="flex items-center gap-1.5">
                 <Sun size={15} className="text-white/70" />
                 {scheduled
-                  ? `${trip.days.length} ${trip.days.length === 1 ? "day" : "days"}`
+                  ? `${trip.dayCount} ${trip.dayCount === 1 ? "day" : "days"}`
                   : `~${trip.durationDays ?? "?"} days`}
               </span>
+              <MembersButton trip={trip} />
             </div>
           </div>
 
@@ -172,7 +188,7 @@ export function TripHeader({
             ) : (
               respondedCount !== null && (
                 <p className="text-right text-xs font-medium text-white/85">
-                  {respondedCount} of {trip.members.length} marked availability
+                  {respondedCount} of {trip.memberCount} marked availability
                 </p>
               )
             )}
@@ -206,13 +222,13 @@ export function TripHeader({
             <>
               <p className="font-display text-4xl">Day {currentDayNumber}</p>
               <p className="mt-2 text-sm text-stone-500">
-                of {trip.days.length} — enjoy {destinationShort ?? "the trip"}!
+                of {trip.dayCount} — enjoy {destinationShort ?? "the trip"}!
               </p>
             </>
           ) : (
             <>
               <p className="font-display text-4xl">
-                {trip.days.length}
+                {trip.dayCount}
                 <span className="ml-2 font-sans text-sm font-normal text-stone-500">
                   days traveled
                 </span>
@@ -256,19 +272,19 @@ export function TripHeader({
               {secondaryText && ` · ${secondaryText}`}
             </p>
           )}
-          {trip.members.length > 1 && (
+          {trip.memberCount > 1 && (
             <p className="mt-1 text-xs text-stone-500">
-              ≈ {formatCurrency(primaryAmount / trip.members.length, trip.currency)}{" "}
+              ≈ {formatCurrency(primaryAmount / trip.memberCount, trip.currency)}{" "}
               per person
               {trip.totalBudget !== null &&
-                ` · ${formatCurrency(trip.totalBudget / trip.members.length, trip.currency)} budgeted`}
+                ` · ${formatCurrency(trip.totalBudget / trip.memberCount, trip.currency)} budgeted`}
             </p>
           )}
         </StatCard>
 
         <StatCard label="Itinerary">
           <p className="font-display text-4xl">
-            {activities.length}
+            {trip.activityCount}
             <span className="ml-2 font-sans text-sm font-normal text-stone-500">
               activities
             </span>

@@ -8,17 +8,27 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { fail, type ActionResult } from "@/lib/action-result";
+import { canCreateInvite, canRevokeInvite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { idSchema, INVALID_INPUT, parseInput } from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
-import type { InviteLink, InvitePreview, InviteRole } from "@/types";
+import type {
+  ActiveInvite,
+  InviteLink,
+  InvitePreview,
+  InviteRole,
+} from "@/types";
 
 /** Invite links stop working this many days after creation. */
 const INVITE_TTL_DAYS = 7;
 
+const REVOKED_MESSAGE =
+  "This invite link was revoked, so it can't be used to join anymore. Ask whoever shared it for a new one.";
+
 /**
- * Creates a shareable invite link for a trip. Only the trip's OWNER may
- * create invites, and a link can grant EDITOR or VIEWER — never OWNER.
- * Links are multi-use until they expire.
+ * Creates a shareable invite link for a trip. The trip's OWNER and EDITORs
+ * may create invites, and a link can grant EDITOR or VIEWER — never OWNER.
+ * Links are multi-use until they expire or are revoked.
  */
 export async function createInvite(
   tripId: string,
@@ -40,8 +50,8 @@ export async function createInvite(
 
     // Non-members get the same answer as a missing trip: no existence leaks.
     if (!membership) return fail("Trip not found.");
-    if (membership.role !== "OWNER") {
-      return fail("Only the trip owner can create invites.");
+    if (!canCreateInvite(membership.role)) {
+      return fail("Only the trip owner and editors can create invite links.");
     }
 
     const invite = await prisma.invite.create({
@@ -91,6 +101,7 @@ export async function getInvitePreview(
       select: {
         role: true,
         expiresAt: true,
+        revokedAt: true,
         creator: { select: { name: true } },
         trip: {
           select: {
@@ -109,6 +120,7 @@ export async function getInvitePreview(
     if (!invite || invite.role === "OWNER") {
       return fail("This invite link is invalid.");
     }
+    if (invite.revokedAt) return fail(REVOKED_MESSAGE);
     if (invite.expiresAt < new Date()) {
       return fail("This invite link has expired. Ask for a new one.");
     }
@@ -155,13 +167,14 @@ export async function acceptInvite(
   try {
     const invite = await prisma.invite.findUnique({
       where: { token },
-      select: { tripId: true, role: true, expiresAt: true },
+      select: { tripId: true, role: true, expiresAt: true, revokedAt: true },
     });
 
     // Ownership is never granted by link, even if a row somehow says so.
     if (!invite || invite.role === "OWNER") {
       return fail("This invite link is invalid.");
     }
+    if (invite.revokedAt) return fail(REVOKED_MESSAGE);
     if (invite.expiresAt < new Date()) {
       return fail("This invite link has expired. Ask for a new one.");
     }
@@ -205,6 +218,120 @@ export async function acceptInvite(
     }
     console.error("acceptInvite failed:", error);
     return fail("Failed to accept invite. Please try again.");
+  }
+}
+
+/**
+ * The trip's invite links that still admit people — not expired, not
+ * revoked — newest first, with who created each and whether the viewer may
+ * revoke it. Visible to the OWNER and EDITORs, the people who can share.
+ */
+export async function getTripInvites(
+  tripId: string,
+): Promise<ActionResult<ActiveInvite[]>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to see invite links.");
+  if (!parseInput(idSchema, tripId)) return fail("Trip not found.");
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { role: true },
+    });
+    if (!membership) return fail("Trip not found.");
+    if (!canCreateInvite(membership.role)) {
+      return fail("Only the trip owner and editors can see invite links.");
+    }
+
+    const invites = await prisma.invite.findMany({
+      where: {
+        tripId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+        // Ownership is never granted by link, even if a row somehow says so.
+        role: { not: "OWNER" },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        token: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+        creator: { select: { id: true, name: true, image: true } },
+      },
+    });
+
+    const origin = await requestOrigin();
+    return {
+      success: true,
+      data: invites.map((invite) => ({
+        id: invite.id,
+        url: `${origin}/invite/${invite.token}`,
+        role: invite.role as InviteRole,
+        expiresAt: invite.expiresAt.toISOString(),
+        createdAt: invite.createdAt.toISOString(),
+        createdBy: invite.creator,
+        canRevoke: canRevokeInvite(membership.role, userId, {
+          createdById: invite.creator.id,
+        }),
+      })),
+    };
+  } catch (error) {
+    console.error("getTripInvites failed:", error);
+    return fail("Failed to load invite links. Please try again.");
+  }
+}
+
+/**
+ * Turns an invite link off so nobody else can join with it. Allowed for the
+ * trip OWNER and for whoever created the link. People who already joined
+ * through it stay members — removing them is a separate, owner-only step.
+ * Revoking an already-revoked link succeeds without changing anything.
+ */
+export async function revokeInvite(
+  inviteId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to revoke an invite.");
+  if (!parseInput(idSchema, inviteId)) return fail(INVALID_INPUT);
+
+  try {
+    const invite = await prisma.invite.findUnique({
+      where: { id: inviteId },
+      select: {
+        createdBy: true,
+        revokedAt: true,
+        trip: {
+          select: { members: { where: { userId }, select: { role: true } } },
+        },
+      },
+    });
+
+    // Non-members get the same answer as a missing invite: no existence leaks.
+    const membership = invite?.trip.members[0];
+    if (!invite || !membership) return fail("Invite not found.");
+    if (
+      !canRevokeInvite(membership.role, userId, {
+        createdById: invite.createdBy,
+      })
+    ) {
+      return fail(
+        "Only the trip owner or whoever created this link can revoke it.",
+      );
+    }
+
+    if (!invite.revokedAt) {
+      await prisma.invite.update({
+        where: { id: inviteId },
+        data: { revokedAt: new Date() },
+      });
+    }
+
+    return { success: true, data: { id: inviteId } };
+  } catch (error) {
+    console.error("revokeInvite failed:", error);
+    return fail("Failed to revoke the invite. Please try again.");
   }
 }
 

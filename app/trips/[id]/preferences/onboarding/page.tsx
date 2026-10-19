@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getMyPreferences } from "@/actions/preferences";
-import { getTripById } from "@/actions/trip";
+import { getTripHeader } from "@/actions/trip";
 import { LoadError } from "@/components/LoadError";
 import { PreferenceDeck } from "@/components/preferences/PreferenceDeck";
 import { currentUserId } from "@/lib/session";
@@ -21,7 +21,7 @@ export default async function PreferenceOnboardingPage({
 }) {
   const { id } = await params;
   const [tripRes, mineRes, userId] = await Promise.all([
-    getTripById(id),
+    getTripHeader(id),
     getMyPreferences(id),
     currentUserId(),
   ]);

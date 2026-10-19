@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getIdeas } from "@/actions/activity-ideas";
-import { getTripById } from "@/actions/trip";
+import { getTripDays, getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
@@ -14,27 +14,30 @@ export default async function TripIdeasPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, ideasRes] = await Promise.all([getTripById(id), getIdeas(id)]);
+  const [tripRes, ideasRes, daysRes] = await Promise.all([
+    getTripHeader(id),
+    getIdeas(id),
+    getTripDays(id),
+  ]);
 
   if (!tripRes.success) {
     if (tripRes.error === "Trip not found.") notFound();
     return <LoadError message={tripRes.error} />;
   }
   if (!ideasRes.success) return <LoadError message={ideasRes.error} />;
+  if (!daysRes.success) return <LoadError message={daysRes.error} />;
 
   const trip = tripRes.data;
   const ideas = ideasRes.data;
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
-  const role =
-    trip.members.find((m) => m.userId === currentUserId)?.role ?? null;
-  const canEdit = role === "OWNER" || role === "EDITOR";
+  const canEdit = trip.role === "OWNER" || trip.role === "EDITOR";
 
-  const days = trip.days.map((d) => ({ id: d.id, date: d.date }));
+  const days = daysRes.data.map((d) => ({ id: d.id, date: d.date }));
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <TripHeader trip={trip} currentUserRole={role} activeTab="ideas" />
+      <TripHeader trip={trip} activeTab="ideas" />
 
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">

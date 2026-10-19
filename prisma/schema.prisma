@@ -123,6 +123,9 @@ model TripMember {
   id        String   @id @default(cuid())
   role      TripRole @default(VIEWER)
   createdAt DateTime @default(now())
+  // Set when this member hid the trip from their own list. Personal: it never
+  // changes anyone else's list or what this member can do on the trip.
+  archivedAt DateTime?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -142,6 +145,9 @@ model Invite {
   role      TripRole @default(VIEWER)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  // Revoked links are kept rather than deleted so opening one can say it was
+  // revoked instead of looking like a mistyped URL.
+  revokedAt DateTime?
 
   tripId String
   trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)

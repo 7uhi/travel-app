@@ -60,9 +60,10 @@ Actions in `actions/`, and the only API route is the Auth.js handler.
 auth.ts / auth.config.ts / middleware.ts   Auth wiring (see below)
 prisma/schema.prisma                       Data model + migrations
 actions/                                   Server actions — the "backend"
-  trip.ts        trips, days, activities
+  trip.ts        trips, days, activities, trip header, edit/reschedule/delete/hide
+  members.ts     member list, leaving, removal, roles, ownership transfer
   expense.ts     expenses, splits, settlements, balances
-  invite.ts      invite links
+  invite.ts      invite links (create, list, revoke, accept)
   preferences.ts travel profiles + per-trip preference answers
 lib/
   split.ts     pure expense-splitting math (integer cents)
@@ -96,9 +97,27 @@ components/                                UI (server + client components)
   `OWNER`, `EDITOR`, or `VIEWER`. Viewers can't edit the itinerary,
   expenses, or shared packing list; they can still vote on ideas, answer the
   group questions, mark their own availability, keep a personal packing list,
-  and record repayments they made or received. `Invite` tokens are multi-use, expire after 7 days, and grant
-  `EDITOR` or `VIEWER` — never `OWNER`. Opening an invite link only shows
-  a preview; joining is an explicit POST from its Join button.
+  and record repayments they made or received. Owners and editors can edit
+  the trip's title and destination; only the owner reschedules it, deletes it
+  (by typing its title), or manages members — changing roles between
+  `EDITOR` and `VIEWER`, removing people, and handing over ownership (the
+  old owner stays on as an editor, so there's always exactly one `OWNER`).
+  Anyone except the owner can leave. Leaving or being removed is refused while
+  that member's balance isn't zero, so nobody walks away from a debt the
+  ledger still shows; their past expenses and repayments stay on the trip.
+- **Rescheduling keeps day N as day N.** Moving the dates shifts every
+  `TripDay` (and its activities) by the same offset. Shortening drops days
+  off the end, and is refused while any of those days still has activities.
+- **Hiding is per member.** `TripMember.archivedAt` moves a trip into a
+  collapsed "Archived" section of *your* trip list without touching anyone
+  else's.
+- **Invites.** `Invite` tokens are multi-use, expire after 7 days, and grant
+  `EDITOR` or `VIEWER` — never `OWNER`. Owners and editors create them and
+  see the trip's active links; a link can be revoked by the owner or whoever
+  created it. Revoking sets `Invite.revokedAt` rather than deleting the row,
+  so opening a revoked link says it was revoked instead of looking like a
+  mistyped URL. Opening an invite link only shows a preview; joining is an
+  explicit POST from its Join button.
 - **Expenses.** `Expense` → `ExpenseSplit` (one share per participant) plus
   `Settlement` for recorded repayments. All money is stored as **integer
   cents** (hundredths of the major unit, whatever the currency), and an

@@ -118,8 +118,8 @@ export interface TripAmountsInput {
     splits: { amountCents: number }[];
   }[];
   settlementCents: number[];
-  /** Planned itinerary costs, in major units. */
-  activityCosts: { title: string; cost: number | null }[];
+  /** Sum of the itinerary's planned activity costs, in major units. */
+  plannedCost: number;
 }
 
 /**
@@ -153,15 +153,15 @@ export function summarizeTripAmounts(trip: TripAmountsInput): {
     label: "a recorded repayment",
     cents,
   }));
-  const planned = trip.activityCosts.flatMap((a) =>
-    a.cost && a.cost > 0
-      ? [{ label: `the planned cost of “${a.title}”`, cents: Math.round(a.cost * 100) }]
-      : [],
-  );
+  const plannedCents = Math.round(trip.plannedCost * 100);
+  const planned =
+    plannedCents > 0
+      ? { label: "the itinerary's planned costs", cents: plannedCents }
+      : null;
 
   const ledger = [...(budget ? [budget] : []), ...expenses, ...shares, ...repayments];
   return {
-    example: expenses[0] ?? budget ?? repayments[0] ?? planned[0] ?? null,
+    example: expenses[0] ?? budget ?? repayments[0] ?? planned,
     fractional: ledger.find((a) => a.cents % 100 !== 0) ?? null,
   };
 }

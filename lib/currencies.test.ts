@@ -100,7 +100,7 @@ describe("summarizeTripAmounts", () => {
     totalBudget: null,
     expenses: [],
     settlementCents: [],
-    activityCosts: [],
+    plannedCost: 0,
   };
   const dinner = {
     description: "Dinner",
@@ -117,7 +117,7 @@ describe("summarizeTripAmounts", () => {
       summarizeTripAmounts({
         ...empty,
         totalBudget: 0,
-        activityCosts: [{ title: "Free walking tour", cost: 0 }],
+        plannedCost: 0,
       }).example,
     ).toBeNull();
   });
@@ -137,9 +137,9 @@ describe("summarizeTripAmounts", () => {
     expect(
       summarizeTripAmounts({
         ...empty,
-        activityCosts: [{ title: "Museum", cost: 12.5 }],
+        plannedCost: 12.5,
       }).example,
-    ).toEqual({ label: "the planned cost of “Museum”", cents: 1_250 });
+    ).toEqual({ label: "the itinerary's planned costs", cents: 1_250 });
   });
 
   it("finds the first ledger amount with cents", () => {
@@ -169,7 +169,7 @@ describe("summarizeTripAmounts", () => {
     expect(
       summarizeTripAmounts({
         ...empty,
-        activityCosts: [{ title: "Museum", cost: 12.5 }],
+        plannedCost: 12.5,
       }).fractional,
     ).toBeNull();
   });

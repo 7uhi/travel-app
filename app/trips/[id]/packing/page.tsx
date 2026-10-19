@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { getTripSpentCents } from "@/actions/expense";
+import { getTripMembers } from "@/actions/members";
 import { getPackingItems, getPersonalPackingItems } from "@/actions/packing";
 import { getPackingTemplates } from "@/actions/packing-templates";
-import { getTripById } from "@/actions/trip";
+import { getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
@@ -15,13 +15,13 @@ export default async function TripPackingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, sharedRes, personalRes, templatesRes, spentRes] =
+  const [tripRes, sharedRes, personalRes, templatesRes, membersRes] =
     await Promise.all([
-      getTripById(id),
+      getTripHeader(id),
       getPackingItems(id),
       getPersonalPackingItems(id),
       getPackingTemplates(id),
-      getTripSpentCents(id),
+      getTripMembers(id),
     ]);
 
   if (!tripRes.success) {
@@ -31,27 +31,21 @@ export default async function TripPackingPage({
   if (!sharedRes.success) return <LoadError message={sharedRes.error} />;
   if (!personalRes.success) return <LoadError message={personalRes.error} />;
   if (!templatesRes.success) return <LoadError message={templatesRes.error} />;
+  if (!membersRes.success) return <LoadError message={membersRes.error} />;
 
   const trip = tripRes.data;
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
-  const role =
-    trip.members.find((m) => m.userId === currentUserId)?.role ?? null;
-  const canEdit = role === "OWNER" || role === "EDITOR";
+  const canEdit = trip.role === "OWNER" || trip.role === "EDITOR";
 
-  const members = trip.members.map((m) => ({
+  const members = membersRes.data.map((m) => ({
     id: m.userId,
-    name: m.user.name ?? m.user.email,
+    name: m.name ?? m.email,
   }));
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <TripHeader
-        trip={trip}
-        currentUserRole={role}
-        activeTab="packing"
-        spentCents={spentRes.success ? spentRes.data : null}
-      />
+      <TripHeader trip={trip} activeTab="packing" />
 
       <section className="mt-10">
         <h2 className="mb-4 font-display text-2xl">Packing</h2>

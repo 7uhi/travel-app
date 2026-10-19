@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { CalendarDays, MapPin, Users } from "lucide-react";
+import { Archive, CalendarDays, ChevronDown, MapPin, Users } from "lucide-react";
 
 import { getMyProfile } from "@/actions/preferences";
 import { getMyTrips } from "@/actions/trip";
 import { PROFILE_ONBOARDING_SEEN } from "@/lib/onboarding";
 import { NewTripButton } from "@/components/NewTripButton";
 import { TravelProfileCard } from "@/components/preferences/TravelProfileCard";
+import { UnarchiveTripButton } from "@/components/trip/UnarchiveTripButton";
 import { formatDateRange } from "@/lib/format";
 import { tripStatus, type TripStatus } from "@/lib/trip-status";
-import type { TripSummary } from "@/types";
+import type { MyTripSummary } from "@/types";
 
 const COVER_GRADIENTS: Record<TripStatus, string> = {
   planning: "bg-[linear-gradient(135deg,#9b8ec4_0%,#6b5b8e_55%,#3d2f52_100%)]",
@@ -49,7 +50,9 @@ export default async function TripsPage() {
     );
   }
 
-  const trips = result.data;
+  // Hiding a trip only files it away for this member; it stays one click off.
+  const trips = result.data.filter((trip) => trip.archivedAt === null);
+  const archived = result.data.filter((trip) => trip.archivedAt !== null);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
@@ -62,7 +65,7 @@ export default async function TripsPage() {
           fires once and the trip banner disappears as soon as it's answered. */}
       {profileRes.success && <TravelProfileCard profile={profileRes.data} />}
 
-      {trips.length === 0 ? (
+      {trips.length === 0 && archived.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-12 text-center">
           <p className="font-display text-2xl">No trips yet</p>
           <p className="mx-auto mt-2 max-w-sm text-sm text-stone-500">
@@ -70,6 +73,10 @@ export default async function TripsPage() {
             you can share with friends.
           </p>
         </div>
+      ) : trips.length === 0 ? (
+        <p className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-8 text-center text-sm text-stone-500">
+          Every trip is archived. Unarchive one below, or start a new trip.
+        </p>
       ) : (
         <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
@@ -77,11 +84,54 @@ export default async function TripsPage() {
           ))}
         </ul>
       )}
+
+      {archived.length > 0 && (
+        <details className="group mt-10">
+          <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full px-1 py-1 text-sm font-medium text-stone-600 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+            <Archive size={15} aria-hidden />
+            Archived ({archived.length})
+            <ChevronDown
+              size={15}
+              aria-hidden
+              className="transition-transform group-open:rotate-180"
+            />
+          </summary>
+          <p className="mt-2 text-xs text-stone-500">
+            Hidden from your list only — everyone else still sees these trips,
+            and you can still open them.
+          </p>
+          <ul className="mt-3 divide-y divide-stone-100 overflow-hidden rounded-2xl border border-stone-200/80 bg-white">
+            {archived.map((trip) => (
+              <ArchivedTripRow key={trip.id} trip={trip} />
+            ))}
+          </ul>
+        </details>
+      )}
     </main>
   );
 }
 
-function TripCard({ trip }: { trip: TripSummary }) {
+function ArchivedTripRow({ trip }: { trip: MyTripSummary }) {
+  return (
+    <li className="flex items-center gap-3 px-4 py-3">
+      <Link
+        href={`/trips/${trip.id}`}
+        className="min-w-0 flex-1 transition-colors hover:text-pine"
+      >
+        <p className="truncate font-medium">{trip.title}</p>
+        <p className="truncate text-xs text-stone-500">
+          {trip.destination ?? "Destination TBD"} ·{" "}
+          {trip.startDate && trip.endDate
+            ? formatDateRange(trip.startDate, trip.endDate)
+            : "Dates TBD"}
+        </p>
+      </Link>
+      <UnarchiveTripButton tripId={trip.id} title={trip.title} />
+    </li>
+  );
+}
+
+function TripCard({ trip }: { trip: MyTripSummary }) {
   const status = tripStatus(trip.startDate, trip.endDate);
 
   return (

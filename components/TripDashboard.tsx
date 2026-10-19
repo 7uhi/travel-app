@@ -3,51 +3,57 @@ import { ItineraryList } from "@/components/ItineraryList";
 import { TripHeader } from "@/components/TripHeader";
 import { PreferencesBanner } from "@/components/preferences/PreferencesBanner";
 import { formatCurrency, formatDateRange } from "@/lib/format";
-import type { TripAvailability, TripRole, TripWithDays } from "@/types";
+import { itineraryTotals } from "@/lib/trip-header";
+import type {
+  TripAvailability,
+  TripHeaderData,
+  TripRole,
+  TripWithDays,
+} from "@/types";
 
 /**
  * The Itinerary tab: shared trip header plus the day-by-day plan — or, while
- * the group is still picking dates, the availability poll in its place.
+ * the group is still picking dates, the availability poll in its place. The
+ * only section that needs the full itinerary (`trip`); the header renders
+ * from the same TripHeaderData as every other tab.
  */
 export function TripDashboard({
   trip,
+  header = null,
   currentUserRole = null,
   showTabs = true,
   availability = null,
   currentUserId = null,
-  spentCents = null,
   preferencesNudge = null,
 }: {
   trip: TripWithDays;
-  /** The viewer's membership role; controls owner-only UI like sharing. */
+  /** From getTripHeader. */
+  header?: TripHeaderData | null;
+  /**
+   * Only read when `header` is missing — the static /preview demo, which
+   * builds its header from the mock trip instead.
+   */
   currentUserRole?: TripRole | null;
   showTabs?: boolean;
   /** The date poll; only provided (and shown) while the trip has no dates. */
   availability?: TripAvailability | null;
   currentUserId?: string | null;
-  /** Total logged expenses; null when spending wasn't loaded. */
-  spentCents?: number | null;
   /** Which deck the viewer still owes, or null when they're all set. */
   preferencesNudge?: "profile" | "trip" | null;
 }) {
+  const summary = header ?? headerFromTrip(trip, currentUserRole ?? "VIEWER");
   const scheduled = trip.startDate !== null;
   const respondedCount = availability
     ? new Set(availability.entries.map((e) => e.userId)).size
     : null;
-  const activityCount = trip.days.reduce(
-    (n, day) => n + day.activities.length,
-    0,
-  );
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <TripHeader
-        trip={trip}
-        currentUserRole={currentUserRole}
+        trip={summary}
         activeTab="itinerary"
         showTabs={showTabs}
         respondedCount={scheduled ? null : respondedCount}
-        spentCents={spentCents}
       />
 
       {preferencesNudge && (
@@ -63,7 +69,7 @@ export function TripDashboard({
                 days={trip.days}
                 currency={trip.currency}
                 canEdit={
-                  currentUserRole === "OWNER" || currentUserRole === "EDITOR"
+                  summary.role === "OWNER" || summary.role === "EDITOR"
                 }
               />
             </>
@@ -76,7 +82,7 @@ export function TripDashboard({
                   availability={availability}
                   members={trip.members}
                   currentUserId={currentUserId}
-                  isOwner={currentUserRole === "OWNER"}
+                  isOwner={summary.role === "OWNER"}
                 />
               ) : (
                 <p className="rounded-2xl border border-stone-200/80 bg-white p-5 text-sm text-stone-500">
@@ -90,7 +96,7 @@ export function TripDashboard({
 
         <aside className="space-y-4 lg:sticky lg:top-8">
           {scheduled && <SpendingByDay trip={trip} />}
-          <TripFacts trip={trip} activityCount={activityCount} />
+          <TripFacts trip={summary} />
         </aside>
       </section>
     </main>
@@ -136,14 +142,7 @@ function SpendingByDay({ trip }: { trip: TripWithDays }) {
   );
 }
 
-function TripFacts({
-  trip,
-  activityCount,
-}: {
-  trip: TripWithDays;
-  activityCount: number;
-}) {
-  const owner = trip.members.find((m) => m.role === "OWNER");
+function TripFacts({ trip }: { trip: TripHeaderData }) {
   const facts: [string, string][] = [
     ["Destination", trip.destination ?? "TBD"],
     [
@@ -155,15 +154,15 @@ function TripFacts({
     [
       "Duration",
       trip.startDate
-        ? `${trip.days.length} ${trip.days.length === 1 ? "day" : "days"}`
+        ? `${trip.dayCount} ${trip.dayCount === 1 ? "day" : "days"}`
         : trip.durationDays
           ? `~${trip.durationDays} days`
           : "TBD",
     ],
-    ["Activities", String(activityCount)],
+    ["Activities", String(trip.activityCount)],
     [
       "Members",
-      `${trip.members.length}${owner?.user.name ? ` · ${owner.user.name} owns` : ""}`,
+      `${trip.memberCount}${trip.ownerName ? ` · ${trip.ownerName} owns` : ""}`,
     ],
   ];
 
@@ -182,4 +181,26 @@ function TripFacts({
       </dl>
     </div>
   );
+}
+
+/** Header data for a trip that only exists as a full itinerary (the demo). */
+function headerFromTrip(trip: TripWithDays, role: TripRole): TripHeaderData {
+  return {
+    id: trip.id,
+    title: trip.title,
+    destination: trip.destination,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    windowStart: trip.windowStart,
+    windowEnd: trip.windowEnd,
+    durationDays: trip.durationDays,
+    totalBudget: trip.totalBudget,
+    currency: trip.currency,
+    role,
+    archivedAt: null,
+    memberCount: trip.members.length,
+    ownerName: trip.members.find((m) => m.role === "OWNER")?.user.name ?? null,
+    ...itineraryTotals(trip.days),
+    spentCents: null,
+  };
 }

@@ -9,6 +9,7 @@ import type {
   User as DbUser,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { fail, type ActionResult } from "@/lib/action-result";
 import {
@@ -26,22 +27,35 @@ import {
   parseIsoDateTime,
   parseUtcDate,
 } from "@/lib/dates";
+import { canEditTripDetails } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { describeBlockedDays, planReschedule } from "@/lib/reschedule";
 import {
   activityInputSchema,
+  archivedFlagSchema,
+  deleteTripConfirmationSchema,
+  idSchema,
   INVALID_INPUT,
   parseInput,
+  rescheduleInputSchema,
+  tripDetailsInputSchema,
   tripInputSchema,
 } from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
+import { itineraryTotals } from "@/lib/trip-header";
 import type {
   Activity,
   ActivityInput,
   CurrencyChangeOptions,
+  MyTripSummary,
+  RescheduleInput,
+  RescheduleResult,
+  TripDay,
   TripDayWithActivities,
+  TripDetailsInput,
+  TripHeaderData,
   TripInput,
   TripMemberWithUser,
-  TripSummary,
   TripWithDays,
 } from "@/types";
 
@@ -188,9 +202,11 @@ export async function createTrip(
 
 /**
  * Lists the signed-in user's trips (via membership): trips still picking
- * dates first (they need attention), then newest start date first.
+ * dates first (they need attention), then newest start date first. Trips the
+ * user hid from their list come back too, with archivedAt set, so the page
+ * can file them under "Archived" instead of losing them.
  */
-export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
+export async function getMyTrips(): Promise<ActionResult<MyTripSummary[]>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to view your trips.");
 
@@ -216,6 +232,7 @@ export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
         role: m.role,
         memberCount: m.trip._count.members,
         dayCount: m.trip._count.days,
+        archivedAt: m.archivedAt?.toISOString() ?? null,
       })),
     };
   } catch (error) {
@@ -228,6 +245,9 @@ export async function getMyTrips(): Promise<ActionResult<TripSummary[]>> {
  * Fetches a trip with its days, activities, and members. Only members of the
  * trip can fetch it; for everyone else the trip is reported as not found so
  * trip ids don't leak information.
+ *
+ * This is the full itinerary — only the itinerary tab needs it. Every other
+ * section renders its header from getTripHeader.
  */
 export async function getTripById(
   id: string,
@@ -308,7 +328,7 @@ export async function updateTripCurrency(
             select: {
               activities: {
                 where: { cost: { gt: 0 } },
-                select: { title: true, cost: true },
+                select: { cost: true },
               },
             },
           },
@@ -321,9 +341,9 @@ export async function updateTripCurrency(
         totalBudget: trip.totalBudget?.toNumber() ?? null,
         expenses: trip.expenses,
         settlementCents: trip.settlements.map((s) => s.amountCents),
-        activityCosts: trip.days
+        plannedCost: trip.days
           .flatMap((d) => d.activities)
-          .map((a) => ({ title: a.title, cost: a.cost?.toNumber() ?? null })),
+          .reduce((sum, a) => sum + (a.cost?.toNumber() ?? 0), 0),
       });
       if (example && options?.relabel !== true) {
         return `This trip already has amounts in ${trip.currency}. Switching to ${currency} relabels them without converting, so it has to be confirmed first.`;
@@ -525,9 +545,436 @@ export async function deleteActivity(
 }
 
 /* ------------------------------------------------------------------ */
+/* Trip header, details, dates, and lifecycle                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The trip header's data contract: trip metadata, the viewer's role and
+ * hidden state, member count, itinerary totals, and logged spending. Every
+ * trip section renders its header from this one query, so the budget card
+ * means the same thing on every tab; only the itinerary tab also loads the
+ * full day plan (getTripById). Members only — everyone else gets "not found".
+ */
+export async function getTripHeader(
+  tripId: string,
+): Promise<ActionResult<TripHeaderData>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to view this trip.");
+  if (!parseInput(idSchema, tripId)) return fail("Trip not found.");
+
+  try {
+    const [trip, spent] = await Promise.all([
+      prisma.trip.findFirst({
+        where: { id: tripId, members: { some: { userId } } },
+        select: {
+          id: true,
+          title: true,
+          destination: true,
+          startDate: true,
+          endDate: true,
+          windowStart: true,
+          windowEnd: true,
+          durationDays: true,
+          totalBudget: true,
+          currency: true,
+          members: {
+            select: {
+              userId: true,
+              role: true,
+              archivedAt: true,
+              user: { select: { name: true } },
+            },
+          },
+          // Costs only: the header needs totals, not the plan itself.
+          days: { select: { activities: { select: { cost: true } } } },
+        },
+      }),
+      prisma.expense.aggregate({
+        where: { tripId },
+        _sum: { amountCents: true },
+      }),
+    ]);
+
+    const mine = trip?.members.find((m) => m.userId === userId);
+    if (!trip || !mine) return fail("Trip not found.");
+
+    const totals = itineraryTotals(
+      trip.days.map((day) => ({
+        activities: day.activities.map((a) => ({
+          cost: a.cost?.toNumber() ?? null,
+        })),
+      })),
+    );
+
+    return {
+      success: true,
+      data: {
+        id: trip.id,
+        title: trip.title,
+        destination: trip.destination,
+        startDate: trip.startDate?.toISOString() ?? null,
+        endDate: trip.endDate?.toISOString() ?? null,
+        windowStart: trip.windowStart?.toISOString() ?? null,
+        windowEnd: trip.windowEnd?.toISOString() ?? null,
+        durationDays: trip.durationDays,
+        totalBudget: trip.totalBudget?.toNumber() ?? null,
+        currency: trip.currency,
+        role: mine.role,
+        archivedAt: mine.archivedAt?.toISOString() ?? null,
+        memberCount: trip.members.length,
+        ownerName:
+          trip.members.find((m) => m.role === "OWNER")?.user.name ?? null,
+        ...totals,
+        spentCents: spent._sum.amountCents ?? 0,
+      },
+    };
+  } catch (error) {
+    console.error("getTripHeader failed:", error);
+    return fail("Failed to load trip. Please try again.");
+  }
+}
+
+/**
+ * The trip's days without their activities, for pickers such as "add this
+ * idea to day…". Members only.
+ */
+export async function getTripDays(
+  tripId: string,
+): Promise<ActionResult<TripDay[]>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to view this trip.");
+  if (!parseInput(idSchema, tripId)) return fail("Trip not found.");
+
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: tripId, members: { some: { userId } } },
+      select: { days: { orderBy: { date: "asc" } } },
+    });
+    if (!trip) return fail("Trip not found.");
+
+    return {
+      success: true,
+      data: trip.days.map((day) => ({
+        id: day.id,
+        date: day.date.toISOString(),
+        tripId: day.tripId,
+        createdAt: day.createdAt.toISOString(),
+        updatedAt: day.updatedAt.toISOString(),
+      })),
+    };
+  } catch (error) {
+    console.error("getTripDays failed:", error);
+    return fail("Failed to load the trip's days. Please try again.");
+  }
+}
+
+/**
+ * Renames the trip and sets, changes, or clears its destination. OWNER or
+ * EDITOR. Clearing the destination puts the trip back to "not decided", which
+ * switches the preference deck back to its destination-finding questions.
+ */
+export async function updateTripDetails(
+  tripId: string,
+  input: TripDetailsInput,
+): Promise<ActionResult<{ title: string; destination: string | null }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to edit this trip.");
+  const data = parseInput(tripDetailsInputSchema, input);
+  if (!parseInput(idSchema, tripId) || !data) return fail(INVALID_INPUT);
+
+  const title = data.title.trim();
+  const destination = data.destination?.trim() || null;
+  if (!title) return fail("Title is required.");
+  if (title.length > MAX_TITLE_LENGTH) {
+    return fail(`Title must be ${MAX_TITLE_LENGTH} characters or fewer.`);
+  }
+  if (destination && destination.length > MAX_DESTINATION_LENGTH) {
+    return fail(
+      `Destination must be ${MAX_DESTINATION_LENGTH} characters or fewer.`,
+    );
+  }
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { role: true },
+    });
+    if (!membership) return fail("Trip not found.");
+    if (!canEditTripDetails(membership.role)) {
+      return fail("Viewers can't edit the trip details.");
+    }
+
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { title, destination },
+    });
+
+    revalidateTrip(tripId);
+    return { success: true, data: { title, destination } };
+  } catch (error) {
+    console.error("updateTripDetails failed:", error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return fail("Trip not found.");
+    }
+    return fail("Failed to save the trip details. Please try again.");
+  }
+}
+
+/**
+ * Kept days move to their new dates in two steps because (tripId, date) is
+ * unique and Postgres checks unique indexes row by row: shifting Sep 12–14 a
+ * day later would otherwise collide with Sep 13 on the first row. The parking
+ * offset lands far past any real trip (parseUtcDate stops at year 2999).
+ */
+const PARKING_OFFSET_DAYS = 1_000_000;
+
+/**
+ * Moves a trip whose dates are already confirmed to a new range. OWNER only.
+ * Day N of the old range becomes day N of the new one and every activity
+ * time moves by the same number of days, so the plan keeps its shape.
+ * Lengthening adds empty days at the end; shortening drops days from the end
+ * and is refused while any of them still has activities. Expenses keep their
+ * dates — they record when money was spent, not where it sits in the plan.
+ *
+ * Runs in one transaction with the trip row locked, so a concurrent
+ * reschedule or repayment can't interleave with the day moves.
+ */
+export async function rescheduleTrip(
+  tripId: string,
+  input: RescheduleInput,
+): Promise<ActionResult<RescheduleResult>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to change the trip dates.");
+  const data = parseInput(rescheduleInputSchema, input);
+  if (!parseInput(idSchema, tripId) || !data) return fail(INVALID_INPUT);
+
+  const startDate = parseUtcDate(data.startDate);
+  const endDate = parseUtcDate(data.endDate);
+  if (!startDate || !endDate) {
+    return fail("Start and end dates must be valid ISO dates (YYYY-MM-DD).");
+  }
+  if (endDate < startDate) {
+    return fail("End date must be on or after the start date.");
+  }
+  if (inclusiveDayCount(startDate, endDate) > MAX_TRIP_DAYS) {
+    return fail(`Trips are limited to ${MAX_TRIP_DAYS} days.`);
+  }
+
+  try {
+    const outcome = await prisma.$transaction(async (tx): Promise<
+      { error: string } | { result: RescheduleResult }
+    > => {
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
+
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          startDate: true,
+          members: { where: { userId }, select: { role: true } },
+          days: {
+            select: {
+              id: true,
+              date: true,
+              _count: { select: { activities: true } },
+            },
+          },
+        },
+      });
+      const membership = trip?.members[0];
+      if (!trip || !membership) return { error: "Trip not found." };
+      if (membership.role !== "OWNER") {
+        return { error: "Only the trip owner can change the trip dates." };
+      }
+      if (!trip.startDate) {
+        return {
+          error:
+            "This trip's dates haven't been picked yet — confirm them from the availability poll first.",
+        };
+      }
+
+      const plan = planReschedule(
+        trip.startDate,
+        trip.days.map((day) => ({
+          id: day.id,
+          date: day.date,
+          activityCount: day._count.activities,
+        })),
+        startDate,
+        endDate,
+      );
+      if (plan.blockedDays.length > 0) {
+        return { error: describeBlockedDays(plan.blockedDays) };
+      }
+
+      if (plan.droppedDays.length > 0) {
+        await tx.tripDay.deleteMany({
+          where: { id: { in: plan.droppedDays.map((day) => day.id) } },
+        });
+      }
+      if (plan.shiftDays !== 0) {
+        await tx.$executeRaw`
+          UPDATE "TripDay"
+          SET "date" = "date" + ${PARKING_OFFSET_DAYS}::int
+          WHERE "tripId" = ${tripId}`;
+        await tx.$executeRaw`
+          UPDATE "TripDay"
+          SET "date" = "date" - ${PARKING_OFFSET_DAYS - plan.shiftDays}::int,
+              "updatedAt" = NOW() AT TIME ZONE 'UTC'
+          WHERE "tripId" = ${tripId}`;
+        await tx.$executeRaw`
+          UPDATE "Activity"
+          SET "time" = "time" + make_interval(days => ${plan.shiftDays}::int),
+              "updatedAt" = NOW() AT TIME ZONE 'UTC'
+          WHERE "time" IS NOT NULL
+            AND "tripDayId" IN (SELECT id FROM "TripDay" WHERE "tripId" = ${tripId})`;
+      }
+      if (plan.newDates.length > 0) {
+        await tx.tripDay.createMany({
+          data: plan.newDates.map((date) => ({ tripId, date })),
+        });
+      }
+      await tx.trip.update({
+        where: { id: tripId },
+        data: { startDate, endDate },
+      });
+
+      return {
+        result: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          shiftDays: plan.shiftDays,
+          addedDays: plan.newDates.length,
+          removedDays: plan.droppedDays.length,
+        },
+      };
+    });
+    if ("error" in outcome) return fail(outcome.error);
+
+    revalidateTrip(tripId);
+    return { success: true, data: outcome.result };
+  } catch (error) {
+    console.error("rescheduleTrip failed:", error);
+    return fail("Failed to change the trip dates. Please try again.");
+  }
+}
+
+/**
+ * Permanently deletes a trip and everything on it (the schema cascades days,
+ * activities, expenses, repayments, invites, and memberships). OWNER only,
+ * and only when `confirmTitle` matches the trip's title, so a stray click or
+ * a replayed request can't do it. On success it redirects to /trips — the
+ * page it was called from no longer exists — so it only ever returns failures.
+ */
+export async function deleteTrip(
+  tripId: string,
+  confirmTitle: string,
+): Promise<ActionResult<never>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to delete this trip.");
+  const confirmation = parseInput(deleteTripConfirmationSchema, confirmTitle);
+  if (!parseInput(idSchema, tripId) || confirmation === null) {
+    return fail(INVALID_INPUT);
+  }
+
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        title: true,
+        members: { where: { userId }, select: { role: true } },
+      },
+    });
+    const membership = trip?.members[0];
+    if (!trip || !membership) return fail("Trip not found.");
+    if (membership.role !== "OWNER") {
+      return fail("Only the trip owner can delete this trip.");
+    }
+    if (confirmation.trim() !== trip.title.trim()) {
+      return fail("Type the trip's title exactly to confirm.");
+    }
+
+    await prisma.trip.delete({ where: { id: tripId } });
+  } catch (error) {
+    console.error("deleteTrip failed:", error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return fail("Trip not found.");
+    }
+    return fail("Failed to delete the trip. Please try again.");
+  }
+
+  revalidatePath("/trips");
+  redirect("/trips");
+}
+
+/**
+ * Hides the trip from (or restores it to) the signed-in member's own trip
+ * list. Any member, any role. Purely personal: nobody else's list, role, or
+ * access changes, and the trip stays fully usable from its URL.
+ */
+export async function setTripArchived(
+  tripId: string,
+  archived: boolean,
+): Promise<ActionResult<{ archivedAt: string | null }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to organize your trips.");
+  const flag = parseInput(archivedFlagSchema, archived);
+  if (!parseInput(idSchema, tripId) || flag === null) return fail(INVALID_INPUT);
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { archivedAt: true },
+    });
+    if (!membership) return fail("Trip not found.");
+
+    // Re-archiving keeps the original date rather than bumping it.
+    const archivedAt = flag ? (membership.archivedAt ?? new Date()) : null;
+    await prisma.tripMember.update({
+      where: { userId_tripId: { userId, tripId } },
+      data: { archivedAt },
+    });
+
+    revalidateTrip(tripId);
+    return {
+      success: true,
+      data: { archivedAt: archivedAt?.toISOString() ?? null },
+    };
+  } catch (error) {
+    console.error("setTripArchived failed:", error);
+    return fail("Failed to update your trip list. Please try again.");
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Helpers (module-private: "use server" files may only export          */
 /* async functions and types)                                           */
 /* ------------------------------------------------------------------ */
+
+const TRIP_SECTIONS = [
+  "",
+  "/ideas",
+  "/expenses",
+  "/packing",
+  "/preferences",
+  "/preferences/onboarding",
+] as const;
+
+/**
+ * Trip metadata shows in every section's header and on the trip list, so a
+ * change to it refreshes all of them.
+ */
+function revalidateTrip(tripId: string): void {
+  revalidatePath("/trips");
+  for (const section of TRIP_SECTIONS) {
+    revalidatePath(`/trips/${tripId}${section}`);
+  }
+}
 
 /**
  * Validates a budget for the Decimal(12,2) column: non-negative, rounded to
