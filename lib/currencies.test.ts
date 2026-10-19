@@ -93,6 +93,11 @@ describe("formatCurrency", () => {
     expect(formatCurrency(110.5, "EUR")).toBe("€110.50");
     expect(formatCurrency(4_500, "JPY")).toBe("¥4,500");
   });
+
+  it("rounds fractional estimates to the currency's own precision", () => {
+    expect(formatCurrency(5_300 / 3, "JPY")).toBe("¥1,767");
+    expect(formatCurrency(100 / 3, "USD")).toBe("$33.33");
+  });
 });
 
 describe("summarizeTripAmounts", () => {

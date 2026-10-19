@@ -7,14 +7,19 @@
  * viewer's timezone.
  */
 
-/** Major units → "$2,000", "$110.50" (never "$110.5"), "¥4,500". */
+/**
+ * Major units → "$2,000", "$110.50" (never "$110.5"), "¥4,500". Whole
+ * amounts drop the decimals; anything else gets the currency's own precision,
+ * so an estimate such as a per-person share reads "≈ ¥1,767", not "¥1,766.67".
+ */
 export function formatCurrency(amount: number, currency = "USD"): string {
-  const digits = Number.isInteger(amount) ? 0 : 2;
   return new Intl.NumberFormat("en", {
     style: "currency",
     currency,
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
+    ...(Number.isInteger(amount) && {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }),
   }).format(amount);
 }
 
