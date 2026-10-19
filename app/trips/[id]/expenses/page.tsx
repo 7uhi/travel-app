@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 
-import { getTripBalances, getTripExpenses } from "@/actions/expense";
+import {
+  getTripBalances,
+  getTripExpenses,
+  getTripSettlements,
+} from "@/actions/expense";
 import { getTripById } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
@@ -16,10 +20,11 @@ export default async function TripExpensesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, expensesRes, balancesRes] = await Promise.all([
+  const [tripRes, expensesRes, balancesRes, settlementsRes] = await Promise.all([
     getTripById(id),
     getTripExpenses(id),
     getTripBalances(id),
+    getTripSettlements(id),
   ]);
 
   if (!tripRes.success) {
@@ -28,6 +33,9 @@ export default async function TripExpensesPage({
   }
   if (!expensesRes.success) return <LoadError message={expensesRes.error} />;
   if (!balancesRes.success) return <LoadError message={balancesRes.error} />;
+  if (!settlementsRes.success) {
+    return <LoadError message={settlementsRes.error} />;
+  }
 
   const trip = tripRes.data;
   const session = await auth();
@@ -85,8 +93,10 @@ export default async function TripExpensesPage({
           <BalancesPanel
             tripId={trip.id}
             balances={balancesRes.data}
+            settlements={settlementsRes.data}
+            members={members}
             currentUserId={currentUserId}
-            canSettle={role !== null}
+            role={role}
           />
         </aside>
       </section>

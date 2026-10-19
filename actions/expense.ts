@@ -3,15 +3,27 @@
 import type {
   Expense as DbExpense,
   ExpenseSplit as DbExpenseSplit,
+  Prisma,
   User as DbUser,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
+import { parseUtcDate } from "@/lib/dates";
+import { formatCents } from "@/lib/format";
+import { canRecordRepayment, canRemoveRepayment } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import {
+  expenseInputSchema,
+  INVALID_INPUT,
+  parseInput,
+  repaymentInputSchema,
+} from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
 import {
+  checkSharesTotal,
   computeBalances,
+  maxRepaymentCents,
   simplifyDebts,
   splitByPercent,
   splitEqual,
@@ -22,12 +34,13 @@ import type {
   ExpenseCategory,
   ExpenseInput,
   ExpenseWithDetails,
+  RepaymentInput,
   SettlementRecord,
   SplitInput,
   TripBalances,
 } from "@/types";
 
-export type { ExpenseInput, SplitInput };
+export type { ExpenseInput, RepaymentInput, SplitInput };
 
 /** €10M in cents — also keeps values far away from Postgres int overflow. */
 const MAX_AMOUNT_CENTS = 1_000_000_000;
@@ -53,11 +66,13 @@ const CATEGORIES: readonly ExpenseCategory[] = [
  */
 export async function createExpense(
   tripId: string,
-  data: ExpenseInput,
+  input: ExpenseInput,
 ): Promise<ActionResult<ExpenseWithDetails>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to add expenses.");
   if (!tripId) return fail("Trip id is required.");
+  const data = parseInput(expenseInputSchema, input);
+  if (!data) return fail(INVALID_INPUT);
 
   try {
     const trip = await prisma.trip.findUnique({
@@ -102,11 +117,13 @@ export async function createExpense(
 /** Replaces an expense's fields and splits. Only the payer or trip OWNER. */
 export async function updateExpense(
   expenseId: string,
-  data: ExpenseInput,
+  input: ExpenseInput,
 ): Promise<ActionResult<ExpenseWithDetails>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to edit expenses.");
   if (!expenseId) return fail("Expense id is required.");
+  const data = parseInput(expenseInputSchema, input);
+  if (!data) return fail(INVALID_INPUT);
 
   try {
     const existing = await prisma.expense.findUnique({
@@ -185,58 +202,175 @@ export async function deleteExpense(
 }
 
 /**
- * Records a repayment between two trip members. Any member may record one
- * (Splitwise-style — "he paid me back in cash" can be logged by anyone in
- * the group), for any positive amount.
+ * Records a repayment one member made to another outside the app (cash, a
+ * bank transfer). Either person involved may record it, as may an owner or
+ * editor; see canRecordRepayment.
+ *
+ * The amount can't exceed what the balances currently support — what the
+ * payer owes overall, capped by what the recipient is owed — so a repayment
+ * can settle a debt but never flip it. Recording is serialized per trip by
+ * locking the trip row, so two people recording the same suggested payment
+ * from stale pages can't both succeed: the second sees the debt already gone.
  */
 export async function recordSettlement(
   tripId: string,
-  fromUserId: string,
-  toUserId: string,
-  amountCents: number,
+  input: RepaymentInput,
 ): Promise<ActionResult<SettlementRecord>> {
   const userId = await currentUserId();
-  if (!userId) return fail("You must be signed in to settle up.");
+  if (!userId) return fail("You must be signed in to record a repayment.");
   if (!tripId) return fail("Trip id is required.");
 
+  const data = parseInput(repaymentInputSchema, input);
+  if (!data) return fail(INVALID_INPUT);
+  const { fromUserId, toUserId, amountCents } = data;
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     return fail("Amount must be a positive whole number of cents.");
   }
   if (amountCents > MAX_AMOUNT_CENTS) return fail("Amount is too large.");
-  if (!fromUserId || !toUserId || fromUserId === toUserId) {
-    return fail("A settlement needs two different members.");
+  if (fromUserId === toUserId) {
+    return fail("A repayment needs two different members.");
   }
 
   try {
-    const members = await prisma.tripMember.findMany({
-      where: { tripId },
-      select: { userId: true },
-    });
-    const memberIds = new Set(members.map((m) => m.userId));
-    if (!memberIds.has(userId)) return fail("Trip not found.");
-    if (!memberIds.has(fromUserId) || !memberIds.has(toUserId)) {
-      return fail("Both people must be members of this trip.");
-    }
+    const outcome = await prisma.$transaction(async (tx): Promise<
+      { error: string } | { settlement: SettlementRow }
+    > => {
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
 
-    const settlement = await prisma.settlement.create({
-      data: { tripId, fromUserId, toUserId, amountCents },
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          currency: true,
+          members: {
+            select: { userId: true, role: true, user: { select: { name: true } } },
+          },
+          expenses: {
+            select: {
+              paidById: true,
+              amountCents: true,
+              splits: { select: { userId: true, amountCents: true } },
+            },
+          },
+          settlements: {
+            select: { fromUserId: true, toUserId: true, amountCents: true },
+          },
+        },
+      });
+      const mine = trip?.members.find((m) => m.userId === userId);
+      if (!trip || !mine) return { error: "Trip not found." };
+
+      const from = trip.members.find((m) => m.userId === fromUserId);
+      const to = trip.members.find((m) => m.userId === toUserId);
+      if (!from || !to) {
+        return { error: "Both people must be members of this trip." };
+      }
+      if (!canRecordRepayment(mine.role, userId, fromUserId, toUserId)) {
+        return {
+          error: "Viewers can only record repayments they made or received.",
+        };
+      }
+
+      const fromName = from.user.name ?? "This member";
+      const toName = to.user.name ?? "the other member";
+      const max = maxRepaymentCents(
+        computeBalances({ expenses: trip.expenses, settlements: trip.settlements }),
+        fromUserId,
+        toUserId,
+      );
+      if (max === 0) {
+        return {
+          error: `${fromName} doesn't owe ${toName} anything right now. The balances may have changed — refresh to see them.`,
+        };
+      }
+      if (amountCents > max) {
+        return {
+          error: `${fromName} can repay ${toName} at most ${formatCents(max, trip.currency)} right now.`,
+        };
+      }
+
+      return {
+        settlement: await tx.settlement.create({
+          data: { tripId, fromUserId, toUserId, amountCents, createdById: userId },
+          include: SETTLEMENT_INCLUDE,
+        }),
+      };
     });
+    if ("error" in outcome) return fail(outcome.error);
 
     revalidatePath(`/trips/${tripId}/expenses`);
-    return {
-      success: true,
-      data: {
-        id: settlement.id,
-        tripId: settlement.tripId,
-        fromUserId: settlement.fromUserId,
-        toUserId: settlement.toUserId,
-        amountCents: settlement.amountCents,
-        date: settlement.date.toISOString(),
-      },
-    };
+    return { success: true, data: serializeSettlement(outcome.settlement) };
   } catch (error) {
     console.error("recordSettlement failed:", error);
-    return fail("Failed to record settlement. Please try again.");
+    return fail("Failed to record the repayment. Please try again.");
+  }
+}
+
+/**
+ * Removes a recorded repayment, restoring the debt it settled. Allowed for
+ * whoever recorded it, either person involved, or the trip owner.
+ */
+export async function deleteSettlement(
+  settlementId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to remove a repayment.");
+  if (!settlementId) return fail("Repayment id is required.");
+
+  try {
+    const existing = await prisma.settlement.findUnique({
+      where: { id: settlementId },
+      select: {
+        tripId: true,
+        fromUserId: true,
+        toUserId: true,
+        createdById: true,
+        trip: {
+          select: { members: { where: { userId }, select: { role: true } } },
+        },
+      },
+    });
+    const mine = existing?.trip.members[0];
+    if (!existing || !mine) return fail("Repayment not found.");
+    if (!canRemoveRepayment(mine.role, userId, existing)) {
+      return fail(
+        "Only the people involved, whoever recorded it, or the owner can remove this repayment.",
+      );
+    }
+
+    await prisma.settlement.delete({ where: { id: settlementId } });
+
+    revalidatePath(`/trips/${existing.tripId}/expenses`);
+    return { success: true, data: { id: settlementId } };
+  } catch (error) {
+    console.error("deleteSettlement failed:", error);
+    return fail("Failed to remove the repayment. Please try again.");
+  }
+}
+
+/** A trip's recorded repayments, newest first. Members only. */
+export async function getTripSettlements(
+  tripId: string,
+): Promise<ActionResult<SettlementRecord[]>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to view repayments.");
+  if (!tripId) return fail("Trip id is required.");
+
+  try {
+    const membership = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId, tripId } },
+      select: { id: true },
+    });
+    if (!membership) return fail("Trip not found.");
+
+    const settlements = await prisma.settlement.findMany({
+      where: { tripId },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      include: SETTLEMENT_INCLUDE,
+    });
+    return { success: true, data: settlements.map(serializeSettlement) };
+  } catch (error) {
+    console.error("getTripSettlements failed:", error);
+    return fail("Failed to load repayments. Please try again.");
   }
 }
 
@@ -428,7 +562,7 @@ function parseExpenseFields(
       paidById: string;
     }
   | { error: string } {
-  const description = data.description?.trim();
+  const description = data.description.trim();
   if (!description) return { error: "Description is required." };
   if (description.length > 200) {
     return { error: "Description must be 200 characters or fewer." };
@@ -445,13 +579,8 @@ function parseExpenseFields(
     return { error: "Unknown expense category." };
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}/.test(data.date ?? "")) {
-    return { error: "Date must be a valid ISO date (YYYY-MM-DD)." };
-  }
-  const date = new Date(`${data.date.slice(0, 10)}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) {
-    return { error: "Date must be a valid ISO date (YYYY-MM-DD)." };
-  }
+  const date = parseUtcDate(data.date);
+  if (!date) return { error: "Date must be a valid ISO date (YYYY-MM-DD)." };
 
   const paidById = data.paidById ?? currentUser;
   if (!memberIds.has(paidById)) {
@@ -467,6 +596,12 @@ function parseExpenseFields(
   };
 }
 
+/**
+ * Turns a split request into stored shares. Whatever the mode, the result is
+ * checked against the final invariant (whole non-negative cents summing to
+ * the total) before it can be written, so no rounding path can unbalance the
+ * ledger.
+ */
 function resolveShares(
   amountCents: number,
   split: SplitInput,
@@ -483,24 +618,31 @@ function resolveShares(
     return null;
   };
 
+  let shares: Share[];
   try {
     switch (split.mode) {
       case "EQUAL": {
         const err = checkMembers(split.participantIds);
         if (err) return { error: err };
-        return { shares: splitEqual(amountCents, split.participantIds) };
+        shares = splitEqual(amountCents, split.participantIds);
+        break;
       }
       case "EXACT": {
         const err =
           checkMembers(split.shares.map((s) => s.userId)) ??
           validateExactShares(amountCents, split.shares);
         if (err) return { error: err };
-        return { shares: split.shares };
+        shares = split.shares.map((s) => ({
+          userId: s.userId,
+          amountCents: s.amountCents,
+        }));
+        break;
       }
       case "PERCENT": {
         const err = checkMembers(split.shares.map((s) => s.userId));
         if (err) return { error: err };
-        return { shares: splitByPercent(amountCents, split.shares) };
+        shares = splitByPercent(amountCents, split.shares);
+        break;
       }
       default:
         return { error: "Unknown split mode." };
@@ -510,6 +652,34 @@ function resolveShares(
       error: error instanceof Error ? error.message : "Invalid split.",
     };
   }
+
+  const err = checkSharesTotal(amountCents, shares);
+  return err ? { error: err } : { shares };
+}
+
+const SETTLEMENT_INCLUDE = {
+  fromUser: { select: { id: true, name: true, image: true } },
+  toUser: { select: { id: true, name: true, image: true } },
+  createdBy: { select: { id: true, name: true, image: true } },
+} as const;
+
+type SettlementRow = Prisma.SettlementGetPayload<{
+  include: typeof SETTLEMENT_INCLUDE;
+}>;
+
+function serializeSettlement(settlement: SettlementRow): SettlementRecord {
+  return {
+    id: settlement.id,
+    tripId: settlement.tripId,
+    fromUserId: settlement.fromUserId,
+    toUserId: settlement.toUserId,
+    createdById: settlement.createdById,
+    amountCents: settlement.amountCents,
+    date: settlement.date.toISOString(),
+    fromUser: settlement.fromUser,
+    toUser: settlement.toUser,
+    createdBy: settlement.createdBy,
+  };
 }
 
 function serializeExpense(

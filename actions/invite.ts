@@ -3,12 +3,14 @@
 import { randomBytes } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { fail, type ActionResult } from "@/lib/action-result";
 import { prisma } from "@/lib/prisma";
 import { currentUserId } from "@/lib/session";
-import type { InviteLink, InviteRole } from "@/types";
+import type { InviteLink, InvitePreview, InviteRole } from "@/types";
 
 /** Invite links stop working this many days after creation. */
 const INVITE_TTL_DAYS = 7;
@@ -68,10 +70,79 @@ export async function createInvite(
 }
 
 /**
+ * What an invite link offers, for the page shown before anyone joins: the
+ * trip, the role it grants, and who sent it. Reading it changes nothing —
+ * joining shares the member's profile with the group, so it only happens
+ * when they explicitly accept. The token is the capability: anyone holding a
+ * valid link may see this much about the trip.
+ */
+export async function getInvitePreview(
+  token: string,
+): Promise<ActionResult<InvitePreview>> {
+  const userId = await currentUserId();
+  if (!userId) return fail("You must be signed in to open an invite.");
+  if (!token || typeof token !== "string") {
+    return fail("This invite link is invalid.");
+  }
+
+  try {
+    const invite = await prisma.invite.findUnique({
+      where: { token },
+      select: {
+        role: true,
+        expiresAt: true,
+        creator: { select: { name: true } },
+        trip: {
+          select: {
+            id: true,
+            title: true,
+            destination: true,
+            startDate: true,
+            endDate: true,
+            _count: { select: { members: true } },
+            members: { where: { userId }, select: { id: true } },
+          },
+        },
+      },
+    });
+
+    if (!invite || invite.role === "OWNER") {
+      return fail("This invite link is invalid.");
+    }
+    if (invite.expiresAt < new Date()) {
+      return fail("This invite link has expired. Ask for a new one.");
+    }
+
+    return {
+      success: true,
+      data: {
+        tripId: invite.trip.id,
+        tripTitle: invite.trip.title,
+        destination: invite.trip.destination,
+        startDate: invite.trip.startDate?.toISOString() ?? null,
+        endDate: invite.trip.endDate?.toISOString() ?? null,
+        role: invite.role,
+        invitedBy: invite.creator.name,
+        memberCount: invite.trip._count.members,
+        expiresAt: invite.expiresAt.toISOString(),
+        alreadyMember: invite.trip.members.length > 0,
+      },
+    };
+  } catch (error) {
+    console.error("getInvitePreview failed:", error);
+    return fail("Failed to open this invite. Please try again.");
+  }
+}
+
+/**
  * Accepts an invite for the signed-in user. Idempotent: if the user is
  * already a member of the trip (in any role), the call succeeds without
  * changing their existing role — so an OWNER clicking their own link is
  * never downgraded.
+ *
+ * Only ever reached through an explicit POST (the invite page's Join
+ * button), never while rendering the invite page itself, so following a link
+ * can't make someone join a trip — and share their profile — by accident.
  */
 export async function acceptInvite(
   token: string,
@@ -87,7 +158,10 @@ export async function acceptInvite(
       select: { tripId: true, role: true, expiresAt: true },
     });
 
-    if (!invite) return fail("This invite link is invalid.");
+    // Ownership is never granted by link, even if a row somehow says so.
+    if (!invite || invite.role === "OWNER") {
+      return fail("This invite link is invalid.");
+    }
     if (invite.expiresAt < new Date()) {
       return fail("This invite link has expired. Ask for a new one.");
     }
@@ -107,9 +181,7 @@ export async function acceptInvite(
       data: { userId, tripId: invite.tripId, role: invite.role },
     });
 
-    // No revalidatePath here: this action runs during the /invite/[token]
-    // page render (a GET), where revalidation is unsupported and throws.
-    // The caller redirects to /trips/[id], which is dynamic and re-fetches.
+    revalidatePath("/trips");
     return {
       success: true,
       data: { tripId: invite.tripId, alreadyMember: false },
@@ -134,6 +206,24 @@ export async function acceptInvite(
     console.error("acceptInvite failed:", error);
     return fail("Failed to accept invite. Please try again.");
   }
+}
+
+/**
+ * Form action behind the invite page's Join button: accepts, then sends a
+ * brand-new member to the trip's preference deck (every question is
+ * skippable) and a returning one straight to the trip.
+ */
+export async function acceptInviteFromForm(
+  _previous: string | null,
+  formData: FormData,
+): Promise<string | null> {
+  const result = await acceptInvite(String(formData.get("token") ?? ""));
+  if (!result.success) return result.error;
+  redirect(
+    result.data.alreadyMember
+      ? `/trips/${result.data.tripId}`
+      : `/trips/${result.data.tripId}/preferences/onboarding`,
+  );
 }
 
 /* ------------------------------------------------------------------ */

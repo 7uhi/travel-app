@@ -5,6 +5,12 @@ import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
 import { prisma } from "@/lib/prisma";
+import {
+  INVALID_INPUT,
+  packingItemInputSchema,
+  packingItemUpdateSchema,
+  parseInput,
+} from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
 import type {
   PackingCategory,
@@ -102,13 +108,15 @@ export async function getPersonalPackingItems(
  */
 export async function addPackingItem(
   tripId: string,
-  data: PackingItemInput,
+  input: PackingItemInput,
 ): Promise<ActionResult<PackingItemWithAssignee>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to edit this trip.");
   if (!tripId) return fail("Trip id is required.");
 
-  const name = data.name?.trim();
+  const data = parseInput(packingItemInputSchema, input);
+  if (!data) return fail(INVALID_INPUT);
+  const name = data.name.trim();
   if (!name) return fail("Item name is required.");
   if (name.length > MAX_NAME_LENGTH) {
     return fail(`Item name must be ${MAX_NAME_LENGTH} characters or fewer.`);
@@ -192,7 +200,7 @@ export async function togglePackingItem(
  */
 export async function updatePackingItem(
   itemId: string,
-  data: {
+  input: {
     name?: string;
     category?: PackingCategory;
     assigneeId?: string | null;
@@ -201,6 +209,8 @@ export async function updatePackingItem(
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to edit this trip.");
   if (!itemId) return fail("Item id is required.");
+  const data = parseInput(packingItemUpdateSchema, input);
+  if (!data) return fail(INVALID_INPUT);
 
   const update: {
     name?: string;

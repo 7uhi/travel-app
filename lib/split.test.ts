@@ -1,13 +1,117 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkSharesTotal,
   computeBalances,
+  maxRepaymentCents,
   prorate,
   simplifyDebts,
+  splitByPercent,
+  splitEqual,
   type Payment,
 } from "./split";
 
 const w = (userId: string, weightCents: number) => ({ userId, weightCents });
+
+const sum = (shares: { amountCents: number }[]) =>
+  shares.reduce((s, x) => s + x.amountCents, 0);
+
+describe("splitEqual", () => {
+  it("gives leftover cents to the earliest participants", () => {
+    expect(splitEqual(1000, ["a", "b", "c"]).map((s) => s.amountCents)).toEqual(
+      [334, 333, 333],
+    );
+  });
+});
+
+describe("splitByPercent", () => {
+  it("splits exactly when percentages divide the total", () => {
+    expect(
+      splitByPercent(10_000, [
+        { userId: "a", percent: 25 },
+        { userId: "b", percent: 75 },
+      ]),
+    ).toEqual([
+      { userId: "a", amountCents: 2_500 },
+      { userId: "b", amountCents: 7_500 },
+    ]);
+  });
+
+  it("never creates or loses money inside the ±0.01 tolerance", () => {
+    for (const percents of [
+      [50, 50.001],
+      [50, 49.999],
+      [33.33, 33.33, 33.33],
+      [33.34, 33.33, 33.34],
+    ]) {
+      for (const total of [1, 99, 10_001, 1_000_000, 123_456_789]) {
+        const shares = splitByPercent(
+          total,
+          percents.map((percent, i) => ({ userId: `u${i}`, percent })),
+        );
+        expect(sum(shares)).toBe(total);
+        expect(checkSharesTotal(total, shares)).toBeNull();
+      }
+    }
+  });
+
+  it("accepts exactly the ±0.01 tolerance despite floating-point noise", () => {
+    const shares = (...percents: number[]) =>
+      percents.map((percent, i) => ({ userId: `u${i}`, percent }));
+    expect(() => splitByPercent(100, shares(33.34, 33.33, 33.34))).not.toThrow();
+    expect(() => splitByPercent(100, shares(33.35, 33.33, 33.34))).toThrow();
+  });
+
+  it("rejects totals outside the tolerance and non-finite percentages", () => {
+    const share = (percent: number) => ({ userId: "a", percent });
+    expect(() => splitByPercent(100, [share(99.9)])).toThrow();
+    expect(() => splitByPercent(100, [share(Number.NaN)])).toThrow();
+    expect(() =>
+      splitByPercent(100, [share(Number.POSITIVE_INFINITY)]),
+    ).toThrow();
+    expect(() =>
+      splitByPercent(100, [share(150), { userId: "b", percent: -50 }]),
+    ).toThrow();
+  });
+});
+
+describe("checkSharesTotal", () => {
+  const s = (userId: string, amountCents: number) => ({ userId, amountCents });
+
+  it("accepts shares that sum to the total, including zero shares", () => {
+    expect(checkSharesTotal(1, [s("a", 1), s("b", 0), s("c", 0)])).toBeNull();
+  });
+
+  it("rejects mismatched sums, fractions, negatives, and duplicates", () => {
+    expect(checkSharesTotal(100, [s("a", 60), s("b", 50)])).not.toBeNull();
+    expect(checkSharesTotal(100, [s("a", 49.5), s("b", 50.5)])).not.toBeNull();
+    expect(checkSharesTotal(100, [s("a", 150), s("b", -50)])).not.toBeNull();
+    expect(checkSharesTotal(100, [s("a", 50), s("a", 50)])).not.toBeNull();
+    expect(checkSharesTotal(100, [])).not.toBeNull();
+  });
+});
+
+describe("maxRepaymentCents", () => {
+  const balances = new Map([
+    ["alex", 8_000],
+    ["sam", -4_000],
+    ["taylor", -4_000],
+  ]);
+
+  it("caps a repayment at what the payer owes and the recipient is owed", () => {
+    expect(maxRepaymentCents(balances, "sam", "alex")).toBe(4_000);
+  });
+
+  it("allows nothing once a debt is settled, so a duplicate can't reverse it", () => {
+    const settled = new Map(balances).set("sam", 0).set("alex", 4_000);
+    expect(maxRepaymentCents(settled, "sam", "alex")).toBe(0);
+  });
+
+  it("allows nothing between two debtors or toward a debtor", () => {
+    expect(maxRepaymentCents(balances, "sam", "taylor")).toBe(0);
+    expect(maxRepaymentCents(balances, "alex", "sam")).toBe(0);
+  });
+});
 
 describe("prorate", () => {
   it("divides exactly when weights divide evenly", () => {

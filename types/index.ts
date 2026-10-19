@@ -35,6 +35,23 @@ export interface InviteLink {
   expiresAt: string;
 }
 
+/** What an invite link offers, shown before anyone joins. */
+export interface InvitePreview {
+  tripId: string;
+  tripTitle: string;
+  destination: string | null;
+  /** ISO date; null while the group is still picking dates */
+  startDate: string | null;
+  endDate: string | null;
+  role: InviteRole;
+  invitedBy: string | null;
+  memberCount: number;
+  /** ISO datetime */
+  expiresAt: string;
+  /** The signed-in user is already on the trip. */
+  alreadyMember: boolean;
+}
+
 export interface Trip {
   id: string;
   title: string;
@@ -202,14 +219,34 @@ export interface ExpenseWithDetails {
   }[];
 }
 
+/** A person reference small enough to ship with every row that names one. */
+export interface PersonSummary {
+  id: string;
+  name: string | null;
+  image: string | null;
+}
+
+/** A recorded repayment between two members, with who logged it. */
 export interface SettlementRecord {
   id: string;
   tripId: string;
   fromUserId: string;
   toUserId: string;
+  /** Null when the recorder's account no longer exists. */
+  createdById: string | null;
   amountCents: number;
   /** ISO datetime */
   date: string;
+  fromUser: PersonSummary;
+  toUser: PersonSummary;
+  createdBy: PersonSummary | null;
+}
+
+/** Arguments for recording a repayment one member made to another. */
+export interface RepaymentInput {
+  fromUserId: string;
+  toUserId: string;
+  amountCents: number;
 }
 
 export interface MemberBalance {

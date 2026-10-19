@@ -18,3 +18,8 @@ body {
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
+
+/* A modal dialog owns the screen; the page behind it shouldn't scroll. */
+html:has(dialog:modal) {
+  overflow: hidden;
+}

@@ -4,6 +4,7 @@ import { getMyProfile } from "@/actions/preferences";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { PreferenceDeck } from "@/components/preferences/PreferenceDeck";
+import { safeLocalPath } from "@/lib/navigation";
 
 /**
  * The account-level travel profile deck, shown just after a member first signs
@@ -25,7 +26,7 @@ export default async function ProfileOnboardingPage({
 
   // Only ever bounce back into the app, never to an attacker-supplied origin.
   const { next } = await searchParams;
-  const returnTo = next?.startsWith("/") && !next.startsWith("//") ? next : "/trips";
+  const returnTo = safeLocalPath(next, "/trips");
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">

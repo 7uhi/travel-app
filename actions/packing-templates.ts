@@ -9,6 +9,11 @@ import {
   isBuiltinTemplateId,
 } from "@/lib/packing-templates";
 import { prisma } from "@/lib/prisma";
+import {
+  INVALID_INPUT,
+  packingTemplateInputSchema,
+  parseInput,
+} from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
 import type {
   PackingCategory,
@@ -151,7 +156,10 @@ export async function updatePackingTemplate(
     }
 
     // Items are replaced wholesale — the dialog always submits the full list.
+    // Locking the template row first serializes concurrent saves, so the
+    // result is one submitted list rather than the union of two.
     const template = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "PackingTemplate" WHERE id = ${templateId} FOR UPDATE`;
       await tx.packingTemplateItem.deleteMany({ where: { templateId } });
       return tx.packingTemplate.update({
         where: { id: templateId },
@@ -246,23 +254,33 @@ export async function importPackingTemplate(
       items = template.items;
     }
 
-    const existing = await prisma.packingItem.findMany({
-      where: { tripId, ownerId: userId },
-      select: { name: true },
-    });
-    const existingNames = new Set(existing.map((i) => i.name.toLowerCase()));
-    const fresh = items.filter((i) => !existingNames.has(i.name.toLowerCase()));
-
-    if (fresh.length > 0) {
-      await prisma.packingItem.createMany({
-        data: fresh.map((i) => ({
-          tripId,
-          ownerId: userId,
-          name: i.name,
-          category: i.category,
-        })),
+    // Locking the member's row serializes imports, so two quick clicks can't
+    // both read the list before either writes and import everything twice.
+    const fresh = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "TripMember" WHERE "tripId" = ${tripId} AND "userId" = ${userId} FOR UPDATE`;
+      const existing = await tx.packingItem.findMany({
+        where: { tripId, ownerId: userId },
+        select: { name: true },
       });
-    }
+      const seen = new Set(existing.map((i) => i.name.toLowerCase()));
+      const toCreate = items.filter((i) => {
+        const key = i.name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (toCreate.length > 0) {
+        await tx.packingItem.createMany({
+          data: toCreate.map((i) => ({
+            tripId,
+            ownerId: userId,
+            name: i.name,
+            category: i.category,
+          })),
+        });
+      }
+      return toCreate;
+    });
 
     revalidatePath(`/trips/${tripId}/packing`);
     return {
@@ -282,19 +300,21 @@ export async function importPackingTemplate(
 
 /** Trims, drops blank rows, and bounds-checks a template payload. */
 function validateTemplateInput(
-  data: PackingTemplateInput,
+  input: PackingTemplateInput,
 ):
   | { name: string; items: { name: string; category: PackingCategory }[] }
   | { error: string } {
-  const name = data.name?.trim();
+  const data = parseInput(packingTemplateInputSchema, input);
+  if (!data) return { error: INVALID_INPUT };
+  const name = data.name.trim();
   if (!name) return { error: "Template name is required." };
   if (name.length > MAX_NAME_LENGTH) {
     return {
       error: `Template name must be ${MAX_NAME_LENGTH} characters or fewer.`,
     };
   }
-  const items = (data.items ?? [])
-    .map((i) => ({ name: i.name?.trim() ?? "", category: i.category }))
+  const items = data.items
+    .map((i) => ({ name: i.name.trim(), category: i.category }))
     .filter((i) => i.name.length > 0);
   if (items.length === 0) {
     return { error: "A template needs at least one item." };

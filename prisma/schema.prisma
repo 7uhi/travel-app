@@ -28,6 +28,7 @@ model User {
   expenseSplits   ExpenseSplit[]
   settlementsFrom Settlement[]   @relation("SettlementsFrom")
   settlementsTo   Settlement[]   @relation("SettlementsTo")
+  settlementsRecorded Settlement[] @relation("SettlementsRecorded")
   availability    AvailabilityDay[]
   packingItems    PackingItem[]     @relation("PackingAssignee")
   personalPacking PackingItem[]     @relation("PersonalPackingItems")
@@ -215,6 +216,11 @@ model Settlement {
 
   toUserId String
   toUser   User   @relation("SettlementsTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  // Who logged the repayment, shown in the trip's repayment history. SetNull
+  // so the record survives if the recorder's account is deleted.
+  createdById String?
+  createdBy   User?   @relation("SettlementsRecorded", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([tripId])
 }

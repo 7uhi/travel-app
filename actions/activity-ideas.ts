@@ -5,7 +5,14 @@ import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
 import { sortIdeasByVotes } from "@/lib/ideas";
+import { parseIsoDateTime } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
+import {
+  activityIdeaInputSchema,
+  INVALID_INPUT,
+  parseInput,
+  promoteIdeaInputSchema,
+} from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
 import type { ActivityIdeaInput, ActivityIdeaWithVotes } from "@/types";
 
@@ -233,22 +240,25 @@ export async function toggleVote(
 export async function promoteIdea(
   ideaId: string,
   tripDayId: string,
-  data: { title: string; time?: string | null },
+  input: { title: string; time?: string | null },
 ): Promise<ActionResult<{ activityId: string }>> {
   const userId = await currentUserId();
   if (!userId) return fail("You must be signed in to edit this trip.");
   if (!ideaId) return fail("Idea id is required.");
   if (!tripDayId) return fail("Trip day id is required.");
 
-  const title = data.title?.trim();
+  const data = parseInput(promoteIdeaInputSchema, input);
+  if (!data) return fail(INVALID_INPUT);
+  const title = data.title.trim();
   if (!title) return fail("Activity title is required.");
+  if (title.length > MAX_TITLE_LENGTH) {
+    return fail(`Title must be ${MAX_TITLE_LENGTH} characters or fewer.`);
+  }
 
   let time: Date | null = null;
   if (data.time) {
-    time = new Date(data.time);
-    if (Number.isNaN(time.getTime())) {
-      return fail("Time must be a valid ISO datetime string.");
-    }
+    time = parseIsoDateTime(data.time);
+    if (!time) return fail("Time must be a valid ISO datetime string.");
   }
 
   try {
@@ -318,7 +328,7 @@ export async function promoteIdea(
 /* ------------------------------------------------------------------ */
 
 /** Validates ActivityIdeaInput and normalizes it for Prisma writes. */
-function parseIdeaFields(data: ActivityIdeaInput):
+function parseIdeaFields(input: ActivityIdeaInput):
   | {
       title: string;
       description: string | null;
@@ -327,7 +337,9 @@ function parseIdeaFields(data: ActivityIdeaInput):
       estimatedCost: number | null;
     }
   | { error: string } {
-  const title = data.title?.trim();
+  const data = parseInput(activityIdeaInputSchema, input);
+  if (!data) return { error: INVALID_INPUT };
+  const title = data.title.trim();
   if (!title) return { error: "Idea title is required." };
   if (title.length > MAX_TITLE_LENGTH) {
     return { error: `Title must be ${MAX_TITLE_LENGTH} characters or fewer.` };

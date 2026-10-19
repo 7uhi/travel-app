@@ -1,12 +1,17 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
 import { suggestWindows } from "@/lib/availability";
-import { dayDatesBetween, MAX_TRIP_DAYS, parseUtcDate } from "@/lib/dates";
+import {
+  dayDatesBetween,
+  inclusiveDayCount,
+  MAX_TRIP_DAYS,
+  parseUtcDate,
+} from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
+import { availabilityDatesSchema, parseInput } from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
 import type { TripAvailability } from "@/types";
 
@@ -27,7 +32,8 @@ export async function setMyAvailability(
   if (!userId) return fail("You must be signed in to mark availability.");
   if (!tripId) return fail("Trip id is required.");
 
-  if (!Array.isArray(dates)) return fail("Dates must be a list.");
+  const values = parseInput(availabilityDatesSchema, dates);
+  if (!values) return fail("Dates must be a list of ISO dates.");
 
   try {
     const trip = await prisma.trip.findFirst({
@@ -43,7 +49,7 @@ export async function setMyAvailability(
     }
 
     const parsed = new Map<number, Date>();
-    for (const value of dates) {
+    for (const value of values) {
       const date = parseUtcDate(value);
       if (!date) return fail("Days must be valid ISO dates (YYYY-MM-DD).");
       if (date < trip.windowStart || date > trip.windowEnd) {
@@ -53,12 +59,16 @@ export async function setMyAvailability(
     }
     const days = [...parsed.values()].sort((a, b) => a.getTime() - b.getTime());
 
-    await prisma.$transaction([
-      prisma.availabilityDay.deleteMany({ where: { tripId, userId } }),
-      prisma.availabilityDay.createMany({
+    // Two saves racing would each delete before either inserts and leave the
+    // union of both submissions; locking the member's row serializes them so
+    // the last save wins outright.
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "TripMember" WHERE "tripId" = ${tripId} AND "userId" = ${userId} FOR UPDATE`;
+      await tx.availabilityDay.deleteMany({ where: { tripId, userId } });
+      await tx.availabilityDay.createMany({
         data: days.map((date) => ({ tripId, userId, date })),
-      }),
-    ]);
+      });
+    });
 
     revalidatePath(`/trips/${tripId}`);
     return {
@@ -135,6 +145,10 @@ export async function getTripAvailability(
  * Confirms a dateless trip's dates and generates its TripDay rows. Only the
  * trip's OWNER, and only once — changing dates after they're set (and days or
  * activities exist) is deliberately unsupported for now.
+ *
+ * "Only once" is enforced by the write itself: the update only matches while
+ * startDate is still null, and the days are created in the same transaction,
+ * so of two concurrent confirmations exactly one claims the trip.
  */
 export async function setTripDates(
   tripId: string,
@@ -145,18 +159,18 @@ export async function setTripDates(
   if (!userId) return fail("You must be signed in to set trip dates.");
   if (!tripId) return fail("Trip id is required.");
 
-  const startDate = parseUtcDate(startDateInput ?? "");
-  const endDate = parseUtcDate(endDateInput ?? "");
+  const startDate = parseUtcDate(startDateInput);
+  const endDate = parseUtcDate(endDateInput);
   if (!startDate || !endDate) {
     return fail("Start and end dates must be valid ISO dates (YYYY-MM-DD).");
   }
   if (endDate < startDate) {
     return fail("End date must be on or after the start date.");
   }
-  const dayDates = dayDatesBetween(startDate, endDate);
-  if (dayDates.length > MAX_TRIP_DAYS) {
+  if (inclusiveDayCount(startDate, endDate) > MAX_TRIP_DAYS) {
     return fail(`Trips are limited to ${MAX_TRIP_DAYS} days.`);
   }
+  const dayDates = dayDatesBetween(startDate, endDate);
 
   try {
     const trip = await prisma.trip.findUnique({
@@ -174,35 +188,31 @@ export async function setTripDates(
     }
     if (trip.startDate) return fail("This trip's dates are already set.");
 
-    const updated = await prisma.trip.update({
-      where: { id: tripId },
-      data: {
-        startDate,
-        endDate,
-        days: { create: dayDates.map((date) => ({ date })) },
-      },
-      select: { id: true, startDate: true, endDate: true },
+    const claimed = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.trip.updateMany({
+        where: { id: tripId, startDate: null },
+        data: { startDate, endDate },
+      });
+      if (count === 0) return false;
+      await tx.tripDay.createMany({
+        data: dayDates.map((date) => ({ tripId, date })),
+      });
+      return true;
     });
+    if (!claimed) return fail("This trip's dates are already set.");
 
     revalidatePath(`/trips/${tripId}`);
     revalidatePath("/trips");
     return {
       success: true,
       data: {
-        id: updated.id,
-        startDate: updated.startDate!.toISOString(),
-        endDate: updated.endDate!.toISOString(),
+        id: tripId,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
       },
     };
   } catch (error) {
     console.error("setTripDates failed:", error);
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      // Raced a concurrent confirm that already created the same TripDays.
-      return fail("This trip's dates are already set.");
-    }
     return fail("Failed to set trip dates. Please try again.");
   }
 }
