@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, X } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 import {
   addActivityToDay,
@@ -10,6 +10,14 @@ import {
   updateActivity,
   type AddActivityInput,
 } from "@/actions/trip";
+import { Dialog } from "@/components/ui/Dialog";
+import {
+  Field,
+  FormError,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/components/ui/form";
 import { formatDayDate, formatTime } from "@/lib/format";
 import type { Activity, TripDayWithActivities } from "@/types";
 
@@ -17,6 +25,9 @@ import type { Activity, TripDayWithActivities } from "@/types";
  * Create/edit dialog for an itinerary activity. Create mode when `activity`
  * is null. The time field is wall-clock ("HH:mm") and is combined with the
  * day's date as UTC, matching the codebase's UTC-everywhere convention.
+ *
+ * Mounted only while open, so it renders the Dialog permanently open and
+ * unmounting it is what closes it (and hands focus back to the opener).
  */
 export function ActivityDialog({
   day,
@@ -85,174 +96,118 @@ export function ActivityDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-      onClick={close}
+    <Dialog
+      open
+      onClose={close}
+      title={activity ? "Edit activity" : "Add activity"}
+      description={formatDayDate(day.date)}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={activity ? "Edit activity" : "Add an activity"}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h2 className="font-display text-2xl">
-              {activity ? "Edit activity" : "Add activity"}
-            </h2>
-            <p className="mt-0.5 text-xs text-stone-500">
-              {formatDayDate(day.date)}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close"
-            className="rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-ink"
-          >
-            <X size={18} />
-          </button>
+      <form action={submit} className="space-y-4">
+        <Field label="Title">
+          <input
+            name="title"
+            required
+            defaultValue={activity?.title ?? ""}
+            placeholder="Pena Palace & gardens"
+            className={inputClass}
+            data-autofocus
+          />
+        </Field>
+
+        <Field label="Description (optional)">
+          <textarea
+            name="description"
+            rows={2}
+            defaultValue={activity?.description ?? ""}
+            placeholder="Timed entry at 10:30 — take the shuttle up."
+            className={`${inputClass} resize-none`}
+          />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Time (optional)">
+            <input
+              name="time"
+              type="time"
+              defaultValue={activity?.time ? formatTime(activity.time) : ""}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Cost (optional)">
+            <input
+              name="cost"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={activity?.cost ?? ""}
+              placeholder="28.00"
+              className={inputClass}
+            />
+          </Field>
         </div>
 
-        <form action={submit} className="space-y-4">
-          <Field label="Title">
+        <Field label="Location (optional)">
+          <input
+            name="locationName"
+            defaultValue={activity?.locationName ?? ""}
+            placeholder="Sintra"
+            className={inputClass}
+          />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Latitude (optional)">
             <input
-              name="title"
-              required
-              defaultValue={activity?.title ?? ""}
-              placeholder="Pena Palace & gardens"
+              name="latitude"
+              type="number"
+              min="-90"
+              max="90"
+              step="any"
+              defaultValue={activity?.latitude ?? ""}
+              placeholder="38.7876"
               className={inputClass}
             />
           </Field>
-
-          <Field label="Description (optional)">
-            <textarea
-              name="description"
-              rows={2}
-              defaultValue={activity?.description ?? ""}
-              placeholder="Timed entry at 10:30 — take the shuttle up."
-              className={`${inputClass} resize-none`}
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Time (optional)">
-              <input
-                name="time"
-                type="time"
-                defaultValue={activity?.time ? formatTime(activity.time) : ""}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Cost (optional)">
-              <input
-                name="cost"
-                type="number"
-                min="0"
-                step="0.01"
-                defaultValue={activity?.cost ?? ""}
-                placeholder="28.00"
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <Field label="Location (optional)">
+          <Field label="Longitude (optional)">
             <input
-              name="locationName"
-              defaultValue={activity?.locationName ?? ""}
-              placeholder="Sintra"
+              name="longitude"
+              type="number"
+              min="-180"
+              max="180"
+              step="any"
+              defaultValue={activity?.longitude ?? ""}
+              placeholder="-9.3904"
               className={inputClass}
             />
           </Field>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Latitude (optional)">
-              <input
-                name="latitude"
-                type="number"
-                min="-90"
-                max="90"
-                step="any"
-                defaultValue={activity?.latitude ?? ""}
-                placeholder="38.7876"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Longitude (optional)">
-              <input
-                name="longitude"
-                type="number"
-                min="-180"
-                max="180"
-                step="any"
-                defaultValue={activity?.longitude ?? ""}
-                placeholder="-9.3904"
-                className={inputClass}
-              />
-            </Field>
-          </div>
+        <FormError message={error} />
 
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
+        <div className="flex items-center justify-between gap-3 pt-1">
+          {activity ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={pending}
+              className="flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          ) : (
+            <span />
           )}
-
-          <div className="flex items-center justify-between gap-3 pt-1">
-            {activity ? (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={pending}
-                className="flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
-              >
-                <Trash2 size={14} />
-                Delete
-              </button>
-            ) : (
-              <span />
-            )}
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={close}
-                className="rounded-full px-4 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={pending}
-                className="rounded-full bg-pine px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-dark disabled:opacity-60"
-              >
-                {pending ? "Saving…" : activity ? "Save changes" : "Add activity"}
-              </button>
-            </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={close} className={secondaryButtonClass}>
+              Cancel
+            </button>
+            <button type="submit" disabled={pending} className={primaryButtonClass}>
+              {pending ? "Saving…" : activity ? "Save changes" : "Add activity"}
+            </button>
           </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-const inputClass =
-  "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine";
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
-        {label}
-      </span>
-      {children}
-    </label>
+        </div>
+      </form>
+    </Dialog>
   );
 }

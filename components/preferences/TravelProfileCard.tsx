@@ -97,21 +97,21 @@ export function TravelProfileCard({
         </p>
       )}
       {avoided.length > 0 && (
-        <p className="mt-1.5 text-xs text-stone-400">
+        <p className="mt-1.5 text-xs text-stone-500">
           Would skip: {avoided.map((i) => INTEREST_LABELS[i.tag]).join(", ")}
         </p>
       )}
       {notes.length > 0 && (
         <p className="mt-2 text-xs text-stone-500">
           {notes.join(" · ")}
-          <span className="text-stone-400">
+          <span className="text-stone-500">
             {" "}
             — shared with everyone on your trips
           </span>
         </p>
       )}
 
-      <p className="mt-3 text-xs text-stone-400">
+      <p className="mt-3 text-xs text-stone-500">
         Used as the starting point on every trip. You can answer differently for
         a single trip from its Preferences tab.
       </p>

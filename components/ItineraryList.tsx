@@ -54,7 +54,7 @@ export function ItineraryList({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-stone-500">
+        <p className="text-sm text-stone-600">
           {days.length} {days.length === 1 ? "day" : "days"} · {activityTotal}{" "}
           {activityTotal === 1 ? "activity" : "activities"}
         </p>
@@ -213,7 +213,7 @@ function ActivityRow({
             {formatTime(activity.time)}
           </span>
         ) : (
-          <span className="text-xs italic text-stone-400">Anytime</span>
+          <span className="text-xs italic text-stone-500">Anytime</span>
         )}
       </div>
 
@@ -241,7 +241,7 @@ function ActivityRow({
           type="button"
           onClick={onEdit}
           aria-label={`Edit ${activity.title}`}
-          className="shrink-0 self-start rounded-full p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-ink sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus:opacity-100"
+          className="shrink-0 self-start rounded-full p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-ink sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus:opacity-100"
         >
           <Pencil size={14} />
         </button>

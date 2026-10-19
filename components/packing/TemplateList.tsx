@@ -103,7 +103,7 @@ export function TemplateList({
                       onClick={() => setEditing(template)}
                       disabled={pending}
                       aria-label={`Edit template ${template.name}`}
-                      className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-ink disabled:opacity-50"
+                      className="rounded-full p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-ink disabled:opacity-50"
                     >
                       <Pencil size={15} />
                     </button>
@@ -112,14 +112,14 @@ export function TemplateList({
                       onClick={() => remove(template)}
                       disabled={pending}
                       aria-label={`Delete template ${template.name}`}
-                      className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                      className="rounded-full p-1.5 text-stone-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                     >
                       <Trash2 size={15} />
                     </button>
                   </div>
                 )}
               </div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-400">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
                 {template.builtin ? "Built-in" : "Custom"} ·{" "}
                 {template.items.length} items
               </p>
@@ -128,7 +128,7 @@ export function TemplateList({
                 {visibleItems.map((item, i) => (
                   <li key={i} className="flex items-baseline gap-2 text-sm">
                     <span className="text-ink">{item.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-stone-400">
+                    <span className="text-[10px] uppercase tracking-wide text-stone-500">
                       {CATEGORY_LABELS[item.category]}
                     </span>
                   </li>

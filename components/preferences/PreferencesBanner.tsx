@@ -66,7 +66,7 @@ export function PreferencesBanner({
           setDismissed(true);
         }}
         aria-label="Dismiss"
-        className="shrink-0 rounded-full p-1.5 text-stone-400 transition-colors hover:bg-white/60 hover:text-ink"
+        className="shrink-0 rounded-full p-1.5 text-stone-600 transition-colors hover:bg-white/60 hover:text-ink"
       >
         <X size={16} />
       </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { clearMyTripPreferences } from "@/actions/preferences";
@@ -14,7 +14,9 @@ import { preferenceDraftKey } from "@/lib/preference-drafts";
  * question opens pre-filled.
  *
  * Confirms inline rather than with window.confirm, matching AvailabilityPlanner
- * and keeping the flow non-blocking.
+ * and keeping the flow non-blocking. Each side replaces the other, so focus is
+ * handed across explicitly: to Cancel (the safe choice) when the question
+ * appears, and back to the button when it's dismissed.
  */
 export function ResetTripPreferencesButton({
   tripId,
@@ -27,6 +29,15 @@ export function ResetTripPreferencesButton({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const promptId = useId();
+  const resetRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+
+  useEffect(() => {
+    if (confirming || !returnFocus.current) return;
+    returnFocus.current = false;
+    resetRef.current?.focus();
+  }, [confirming]);
 
   function reset() {
     startTransition(async () => {
@@ -50,9 +61,10 @@ export function ResetTripPreferencesButton({
   if (!confirming) {
     return (
       <button
+        ref={resetRef}
         type="button"
         onClick={() => setConfirming(true)}
-        className="rounded-full px-3 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
+        className="rounded-full px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:text-ink"
       >
         Reset to my usual
       </button>
@@ -60,10 +72,20 @@ export function ResetTripPreferencesButton({
   }
 
   return (
-    <span className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="text-stone-500">
-        {error ?? "Clear your answers for this trip?"}
-      </span>
+    <span
+      role="group"
+      aria-labelledby={promptId}
+      className="flex flex-wrap items-center gap-2 text-sm"
+    >
+      {error ? (
+        <span id={promptId} role="alert" className="text-stone-600">
+          {error}
+        </span>
+      ) : (
+        <span id={promptId} className="text-stone-600">
+          Clear your answers for this trip?
+        </span>
+      )}
       <button
         type="button"
         onClick={reset}
@@ -75,11 +97,13 @@ export function ResetTripPreferencesButton({
       <button
         type="button"
         onClick={() => {
+          returnFocus.current = true;
           setConfirming(false);
           setError(null);
         }}
         disabled={pending}
-        className="rounded-full px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors hover:text-ink"
+        autoFocus
+        className="rounded-full px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:text-ink"
       >
         Cancel
       </button>

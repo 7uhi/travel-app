@@ -62,12 +62,12 @@ export function MemberPreferenceCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-ink">
             {member.name ?? "Member"}
-            {isYou && <span className="text-stone-400"> (you)</span>}
+            {isYou && <span className="text-stone-500"> (you)</span>}
           </p>
           <p className="text-xs text-stone-500">
             {status}
             {overridden && (
-              <span className="text-stone-400"> · set for this trip</span>
+              <span className="text-stone-500"> · set for this trip</span>
             )}
           </p>
         </div>
@@ -102,7 +102,7 @@ export function MemberPreferenceCard({
             </p>
           )}
           {avoided.length > 0 && (
-            <p className="mt-1.5 text-xs text-stone-400">
+            <p className="mt-1.5 text-xs text-stone-500">
               Would skip:{" "}
               {avoided.map((i) => INTEREST_LABELS[i.tag]).join(", ")}
             </p>
@@ -132,12 +132,12 @@ export function MemberPreferenceCard({
         <div className="mt-3 space-y-1 text-sm">
           {trip.mustDo && (
             <p className="text-stone-600">
-              <span className="text-stone-400">Must do:</span> {trip.mustDo}
+              <span className="text-stone-500">Must do:</span> {trip.mustDo}
             </p>
           )}
           {trip.dealBreakers && (
             <p className="text-stone-600">
-              <span className="text-stone-400">Deal-breaker:</span>{" "}
+              <span className="text-stone-500">Deal-breaker:</span>{" "}
               {trip.dealBreakers}
             </p>
           )}

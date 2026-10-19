@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { CalendarCheck } from "lucide-react";
 
 import { setMyAvailability, setTripDates } from "@/actions/availability";
 import { Avatar } from "@/components/Avatar";
+import { FormError } from "@/components/ui/form";
 import { dailyCounts } from "@/lib/availability";
-import { formatDateRange } from "@/lib/format";
+import { formatDateRange, formatDayDate } from "@/lib/format";
 import type { TripAvailability, TripMemberWithUser } from "@/types";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -39,6 +40,36 @@ export function AvailabilityPlanner({
   } | null>(null);
   const [saving, startSaving] = useTransition();
   const [settingDates, startSettingDates] = useTransition();
+
+  /*
+   * The confirmation replaces or sits below whatever opened it, so focus is
+   * moved explicitly: into the panel when it appears (otherwise a keyboard
+   * user is left on the trigger, or on <body> when the "Review" form it
+   * replaces unmounts), and back when it's cancelled.
+   */
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const startDateRef = useRef<HTMLInputElement>(null);
+  const confirmOpener = useRef<HTMLElement | null>(null);
+  const confirmTitleId = useId();
+  useEffect(() => {
+    if (confirming) {
+      confirmRef.current?.focus();
+      return;
+    }
+    const opener = confirmOpener.current;
+    confirmOpener.current = null;
+    if (!opener) return;
+    (opener.isConnected ? opener : startDateRef.current)?.focus();
+  }, [confirming]);
+
+  function review(range: { startDate: string; endDate: string }) {
+    confirmOpener.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setError(null);
+    setConfirming(range);
+  }
 
   const savedMine = useMemo(
     () =>
@@ -135,7 +166,7 @@ export function AvailabilityPlanner({
                 {WEEKDAYS.map((w, i) => (
                   <span
                     key={`${w}-${i}`}
-                    className="pb-1 text-center text-[10px] font-semibold text-stone-400"
+                    className="pb-1 text-center text-[10px] font-semibold text-stone-500"
                   >
                     {w}
                   </span>
@@ -147,7 +178,7 @@ export function AvailabilityPlanner({
                     return (
                       <span
                         key={iso}
-                        className="flex h-9 items-center justify-center rounded-lg text-xs text-stone-300"
+                        className="flex h-9 items-center justify-center rounded-lg text-xs text-stone-500"
                       >
                         {dayOfMonth(iso)}
                       </span>
@@ -163,9 +194,13 @@ export function AvailabilityPlanner({
                       onClick={() => toggle(iso)}
                       disabled={!currentUserId}
                       aria-pressed={selected}
+                      aria-label={`${formatDayDate(iso)}, ${count} of ${members.length} free`}
                       title={`${count} of ${members.length} free`}
+                      // White only from a 75% fill, where it clears 4.5:1;
+                      // ink is a shade too light for the 60–75% fills, so
+                      // everything below gets black.
                       className={`flex h-9 items-center justify-center rounded-lg text-xs tabular-nums transition-[box-shadow,background-color] hover:ring-1 hover:ring-pine/50 ${
-                        heat > 0.6 ? "text-white" : "text-ink"
+                        heat >= 0.75 ? "text-white" : "text-black"
                       } ${selected ? "font-bold ring-2 ring-inset ring-clay" : ""}`}
                       style={{
                         backgroundColor:
@@ -186,7 +221,7 @@ export function AvailabilityPlanner({
         <div className="mt-4 flex items-center justify-between gap-3">
           <p className="text-xs text-stone-500">
             {mine.size} {mine.size === 1 ? "day" : "days"} marked
-            <span className="text-stone-400"> · outlined days are yours</span>
+            <span className="text-stone-500"> · outlined days are yours</span>
           </p>
           {dirty && (
             <button
@@ -201,11 +236,7 @@ export function AvailabilityPlanner({
         </div>
       </div>
 
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      <FormError message={error} />
 
       <div className="grid items-start gap-4 sm:grid-cols-2">
         {/* Suggested windows */}
@@ -246,13 +277,12 @@ export function AvailabilityPlanner({
                     {isOwner && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setError(null);
-                          setConfirming({
+                        onClick={() =>
+                          review({
                             startDate: s.startDate,
                             endDate: s.endDate,
-                          });
-                        }}
+                          })
+                        }
                         className="rounded-full border border-pine px-3 py-1 text-xs font-medium text-pine transition-colors hover:bg-pine-soft"
                       >
                         Use these dates
@@ -265,8 +295,14 @@ export function AvailabilityPlanner({
           )}
 
           {isOwner && confirming && (
-            <div className="mt-4 rounded-xl bg-pine-soft p-3 text-sm">
-              <p className="flex items-center gap-1.5 font-medium">
+            <div
+              ref={confirmRef}
+              role="group"
+              aria-labelledby={confirmTitleId}
+              tabIndex={-1}
+              className="mt-4 rounded-xl bg-pine-soft p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-pine"
+            >
+              <p id={confirmTitleId} className="flex items-center gap-1.5 font-medium">
                 <CalendarCheck size={15} className="shrink-0 text-pine" />
                 Set {formatDateRange(confirming.startDate, confirming.endDate)}?
               </p>
@@ -279,7 +315,7 @@ export function AvailabilityPlanner({
                   type="button"
                   onClick={() => setConfirming(null)}
                   disabled={settingDates}
-                  className="rounded-full px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors hover:text-ink"
+                  className="rounded-full px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:text-ink"
                 >
                   Cancel
                 </button>
@@ -298,19 +334,19 @@ export function AvailabilityPlanner({
           {isOwner && !confirming && (
             <form
               className="mt-4 border-t border-stone-100 pt-4"
-              action={(formData) => {
-                setError(null);
-                setConfirming({
+              action={(formData) =>
+                review({
                   startDate: String(formData.get("startDate") ?? ""),
                   endDate: String(formData.get("endDate") ?? ""),
-                });
-              }}
+                })
+              }
             >
               <p className="mb-2 text-xs font-medium text-stone-500">
                 Or pick the dates yourself
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <input
+                  ref={startDateRef}
                   name="startDate"
                   type="date"
                   required
@@ -358,7 +394,7 @@ export function AvailabilityPlanner({
                   <span className="min-w-0 flex-1 truncate">
                     {member.user.name ?? "Someone"}
                     {member.userId === currentUserId && (
-                      <span className="text-stone-400"> (you)</span>
+                      <span className="text-stone-500"> (you)</span>
                     )}
                   </span>
                   {dayCount > 0 ? (
@@ -366,7 +402,7 @@ export function AvailabilityPlanner({
                       {dayCount} {dayCount === 1 ? "day" : "days"}
                     </span>
                   ) : (
-                    <span className="text-xs text-stone-400">no days yet</span>
+                    <span className="text-xs text-stone-500">no days yet</span>
                   )}
                 </li>
               );
