@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { fail, type ActionResult } from "@/lib/action-result";
+import { currencyUnitCents } from "@/lib/currencies";
 import { formatCents } from "@/lib/format";
 import { canLeaveTrip, canManageMembers } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -15,7 +16,7 @@ import {
   parseInput,
 } from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
-import { computeBalances } from "@/lib/split";
+import { computeBalances, roundBalances } from "@/lib/split";
 import type { InviteRole, TripMemberDetail } from "@/types";
 
 /*
@@ -105,7 +106,7 @@ export async function leaveTrip(tripId: string): Promise<ActionResult<never>> {
         };
       }
 
-      const net = await balanceOf(tx, tripId, userId);
+      const net = await balanceOf(tx, tripId, userId, trip.currency);
       if (net !== 0) {
         const amount = formatCents(Math.abs(net), trip.currency);
         return {
@@ -146,7 +147,7 @@ export async function removeMember(
       const gate = await ownerGate(tx, tripId, userId, memberUserId);
       if ("error" in gate) return gate;
 
-      const net = await balanceOf(tx, tripId, memberUserId);
+      const net = await balanceOf(tx, tripId, memberUserId, gate.currency);
       if (net !== 0) {
         const amount = formatCents(Math.abs(net), gate.currency);
         const owes = net < 0 ? `still owes ${amount}` : `is still owed ${amount}`;
@@ -311,26 +312,35 @@ async function ownerGate(
 }
 
 /**
- * A member's net balance on the trip in cents (positive = is owed), from only
- * the expenses and repayments that involve them.
+ * A member's net balance on the trip in cents (positive = is owed), exactly
+ * as the Expenses tab shows it: the whole trip's balances rounded to whole
+ * currency units (see roundBalances). Gating on the raw figure would refuse
+ * someone the tab shows as settled over a fraction of a yen nobody can pay.
  */
-async function balanceOf(tx: Tx, tripId: string, userId: string): Promise<number> {
+async function balanceOf(
+  tx: Tx,
+  tripId: string,
+  userId: string,
+  currency: string,
+): Promise<number> {
   const expenses = await tx.expense.findMany({
-    where: {
-      tripId,
-      OR: [{ paidById: userId }, { splits: { some: { userId } } }],
-    },
+    where: { tripId },
     select: {
       paidById: true,
       amountCents: true,
-      splits: { where: { userId }, select: { userId: true, amountCents: true } },
+      splits: { select: { userId: true, amountCents: true } },
     },
   });
   const settlements = await tx.settlement.findMany({
-    where: { tripId, OR: [{ fromUserId: userId }, { toUserId: userId }] },
+    where: { tripId },
     select: { fromUserId: true, toUserId: true, amountCents: true },
   });
-  return computeBalances({ expenses, settlements }).get(userId) ?? 0;
+  return (
+    roundBalances(
+      computeBalances({ expenses, settlements }),
+      currencyUnitCents(currency),
+    ).get(userId) ?? 0
+  );
 }
 
 /**

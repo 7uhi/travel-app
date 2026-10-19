@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, EyeOff, MapPin, Sun } from "lucide-react";
+import { CalendarDays, EyeOff, MapPin, Sun, Users } from "lucide-react";
 
 import { EditBudgetButton } from "@/components/EditBudgetButton";
 import { ShareTripButton } from "@/components/ShareTripButton";
@@ -30,10 +30,16 @@ export function TripHeader({
   activeTab = "itinerary",
   showTabs = true,
   respondedCount = null,
+  readOnly = false,
 }: {
   trip: TripHeaderData;
   activeTab?: TripTab;
   showTabs?: boolean;
+  /**
+   * Leaves out the membership controls (trip actions menu, members dialog),
+   * for the /preview sample, which has no real trip behind it.
+   */
+  readOnly?: boolean;
   /** Members who marked availability; only shown while the trip is unscheduled. */
   respondedCount?: number | null;
 }) {
@@ -133,7 +139,7 @@ export function TripHeader({
               )
             )}
             {canCreateInvite(trip.role) && <ShareTripButton tripId={trip.id} />}
-            <TripActionsMenu trip={trip} />
+            {!readOnly && <TripActionsMenu trip={trip} />}
           </span>
         </div>
 
@@ -168,7 +174,14 @@ export function TripHeader({
                   ? `${trip.dayCount} ${trip.dayCount === 1 ? "day" : "days"}`
                   : `~${trip.durationDays ?? "?"} days`}
               </span>
-              <MembersButton trip={trip} />
+              {readOnly ? (
+                <span className="flex items-center gap-1.5">
+                  <Users size={15} className="text-white/70" aria-hidden />
+                  {trip.memberCount} {trip.memberCount === 1 ? "member" : "members"}
+                </span>
+              ) : (
+                <MembersButton trip={trip} />
+              )}
             </div>
           </div>
 

@@ -380,11 +380,11 @@ describe("roundBalances", () => {
       ["b", -667],
       ["c", -334],
     ]);
-    expect(roundBalances(balances, 1, ["a", "b", "c"])).toEqual(balances);
+    expect(roundBalances(balances, 1)).toEqual(balances);
   });
 
   it("rounds to whole yen without breaking the zero sum", () => {
-    const rounded = roundBalances(legacy, YEN, order);
+    const rounded = roundBalances(legacy, YEN);
     expect(rounded).toEqual(
       new Map([
         ["alex", 666 * YEN],
@@ -395,7 +395,7 @@ describe("roundBalances", () => {
   });
 
   it("makes settle-up suggestions and the repayment cap whole yen", () => {
-    const rounded = roundBalances(legacy, YEN, order);
+    const rounded = roundBalances(legacy, YEN);
     const payments = simplifyDebts(rounded, order);
     expect(payments).toEqual([
       { fromUserId: "sam", toUserId: "alex", amountCents: 333 * YEN },
@@ -406,31 +406,25 @@ describe("roundBalances", () => {
 
   it("holds still while the group pays the rounded suggestions", () => {
     let raw = legacy;
-    for (const payment of simplifyDebts(roundBalances(legacy, YEN, order), order)) {
-      const before = roundBalances(raw, YEN, order);
+    for (const payment of simplifyDebts(roundBalances(legacy, YEN), order)) {
+      const before = roundBalances(raw, YEN);
       raw = settle(raw, [payment]);
-      expect(roundBalances(raw, YEN, order)).toEqual(settle(before, [payment]));
+      expect(roundBalances(raw, YEN)).toEqual(settle(before, [payment]));
     }
-    for (const cents of roundBalances(raw, YEN, order).values()) {
+    for (const cents of roundBalances(raw, YEN).values()) {
       expect(cents).toBe(0);
     }
   });
 
-  it("breaks remainder ties in member order", () => {
+  it("breaks remainder ties by user id, whoever is still a member", () => {
     const tied = new Map([
       ["b", -50],
       ["a", 50],
     ]);
-    expect(roundBalances(tied, YEN, ["a", "b"])).toEqual(
+    expect(roundBalances(tied, YEN)).toEqual(
       new Map([
         ["b", -100],
         ["a", 100],
-      ]),
-    );
-    expect(roundBalances(tied, YEN, ["b", "a"])).toEqual(
-      new Map([
-        ["b", 0],
-        ["a", 0],
       ]),
     );
   });
@@ -449,7 +443,7 @@ describe("roundBalances", () => {
         };
       });
       const raw = computeBalances({ expenses, settlements: [] });
-      const rounded = roundBalances(raw, YEN, ids);
+      const rounded = roundBalances(raw, YEN);
       expect([...rounded.values()].reduce((a, b) => a + b, 0)).toBe(0);
       for (const [id, cents] of rounded) {
         expect(Number.isInteger(cents / YEN)).toBe(true);

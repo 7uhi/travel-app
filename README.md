@@ -112,12 +112,13 @@ components/                                UI (server + client components)
   collapsed "Archived" section of *your* trip list without touching anyone
   else's.
 - **Invites.** `Invite` tokens are multi-use, expire after 7 days, and grant
-  `EDITOR` or `VIEWER` — never `OWNER`. Owners and editors create them and
-  see the trip's active links; a link can be revoked by the owner or whoever
-  created it. Revoking sets `Invite.revokedAt` rather than deleting the row,
-  so opening a revoked link says it was revoked instead of looking like a
-  mistyped URL. Opening an invite link only shows a preview; joining is an
-  explicit POST from its Join button.
+  `EDITOR` or `VIEWER` — never `OWNER`. Only the owner creates them and
+  sees the trip's active links; a link can be revoked by the owner or whoever
+  created it (a former owner keeps that for links they sent). Revoking
+  sets `Invite.revokedAt` rather than deleting the row, so opening a
+  revoked link says it was revoked instead of looking like a mistyped URL.
+  Opening an invite link only shows a preview; joining is an explicit POST
+  from its Join button.
 - **Expenses.** `Expense` → `ExpenseSplit` (one share per participant) plus
   `Settlement` for recorded repayments. All money is stored as **integer
   cents** (hundredths of the major unit, whatever the currency), and an

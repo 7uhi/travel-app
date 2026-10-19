@@ -26,8 +26,8 @@ const REVOKED_MESSAGE =
   "This invite link was revoked, so it can't be used to join anymore. Ask whoever shared it for a new one.";
 
 /**
- * Creates a shareable invite link for a trip. The trip's OWNER and EDITORs
- * may create invites, and a link can grant EDITOR or VIEWER — never OWNER.
+ * Creates a shareable invite link for a trip. Only the trip's OWNER may
+ * create invites, and a link can grant EDITOR or VIEWER — never OWNER.
  * Links are multi-use until they expire or are revoked.
  */
 export async function createInvite(
@@ -51,7 +51,7 @@ export async function createInvite(
     // Non-members get the same answer as a missing trip: no existence leaks.
     if (!membership) return fail("Trip not found.");
     if (!canCreateInvite(membership.role)) {
-      return fail("Only the trip owner and editors can create invite links.");
+      return fail("Only the trip owner can create invites.");
     }
 
     const invite = await prisma.invite.create({
@@ -224,7 +224,7 @@ export async function acceptInvite(
 /**
  * The trip's invite links that still admit people — not expired, not
  * revoked — newest first, with who created each and whether the viewer may
- * revoke it. Visible to the OWNER and EDITORs, the people who can share.
+ * revoke it. Visible to the OWNER, who is the one who shares.
  */
 export async function getTripInvites(
   tripId: string,
@@ -240,7 +240,7 @@ export async function getTripInvites(
     });
     if (!membership) return fail("Trip not found.");
     if (!canCreateInvite(membership.role)) {
-      return fail("Only the trip owner and editors can see invite links.");
+      return fail("Only the trip owner can see invite links.");
     }
 
     const invites = await prisma.invite.findMany({

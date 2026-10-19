@@ -768,6 +768,12 @@ export async function rescheduleTrip(
       { error: string } | { result: RescheduleResult }
     > => {
       await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
+      // Adding an activity takes a key-share lock on its day through the
+      // foreign key, so locking the days too means an activity saved at the
+      // same moment either commits before the counts below (and blocks a
+      // shrink) or waits and then fails against a dropped day — never gets
+      // deleted after the check said the day was empty.
+      await tx.$queryRaw`SELECT id FROM "TripDay" WHERE "tripId" = ${tripId} FOR UPDATE`;
 
       const trip = await tx.trip.findUnique({
         where: { id: tripId },

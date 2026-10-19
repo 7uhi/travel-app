@@ -21,15 +21,15 @@ const ROLE_OPTIONS: { role: InviteRole; label: string; description: string }[] =
     role: "EDITOR",
     label: "Editor",
     description:
-      "Also plans the itinerary, adds expenses, edits the shared packing list, and can invite others.",
+      "Also plans the itinerary, adds expenses, and edits the shared packing list.",
   },
 ];
 
 /**
  * Opens the trip's sharing dialog: create an invite link for a chosen role,
  * see every link that still works (role, who made it, when it expires), and
- * revoke them. Rendered for owners and editors; the invite actions enforce
- * the same rules server-side.
+ * revoke them. Rendered for the owner; the invite actions enforce the same
+ * rule server-side.
  */
 export function ShareTripButton({ tripId }: { tripId: string }) {
   const [open, setOpen] = useState(false);

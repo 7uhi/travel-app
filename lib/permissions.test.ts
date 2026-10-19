@@ -9,12 +9,16 @@ import {
 } from "./permissions";
 
 describe("trip lifecycle permissions", () => {
-  it("lets owners and editors edit details and create invites", () => {
-    for (const check of [canEditTripDetails, canCreateInvite]) {
-      expect(check("OWNER")).toBe(true);
-      expect(check("EDITOR")).toBe(true);
-      expect(check("VIEWER")).toBe(false);
-    }
+  it("lets owners and editors edit details", () => {
+    expect(canEditTripDetails("OWNER")).toBe(true);
+    expect(canEditTripDetails("EDITOR")).toBe(true);
+    expect(canEditTripDetails("VIEWER")).toBe(false);
+  });
+
+  it("keeps invite links with the owner", () => {
+    expect(canCreateInvite("OWNER")).toBe(true);
+    expect(canCreateInvite("EDITOR")).toBe(false);
+    expect(canCreateInvite("VIEWER")).toBe(false);
   });
 
   it("keeps member management with the owner", () => {

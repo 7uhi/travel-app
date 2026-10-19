@@ -147,20 +147,27 @@ export async function updateExpense(
     const outcome = await prisma.$transaction(async (tx): Promise<
       { error: string } | { expense: ExpenseRow }
     > => {
+      const found = await tx.expense.findUnique({
+        where: { id: expenseId },
+        select: { tripId: true },
+      });
+      if (!found) return { error: "Expense not found." };
+      // Lock before reading membership, so a member leaving at the same
+      // moment is either fully gone or fully still here for the checks below.
+      const currency = await lockTripCurrency(tx, found.tripId);
+      if (!currency) return { error: "Expense not found." };
+
       const existing = await tx.expense.findUnique({
         where: { id: expenseId },
-        select: {
-          tripId: true,
-          paidById: true,
-          trip: { select: { members: { select: { userId: true, role: true } } } },
-        },
+        select: EXISTING_EXPENSE_SELECT,
       });
       const gate = payerOrOwnerGate(existing, userId, "edit");
       if (gate) return { error: gate };
-      const currency = await lockTripCurrency(tx, existing!.tripId);
-      if (!currency) return { error: "Expense not found." };
-
       const memberIds = new Set(existing!.trip.members.map((m) => m.userId));
+      if (involvesDeparted(expenseParticipants(existing!), memberIds)) {
+        return { error: DEPARTED_MESSAGE };
+      }
+
       const parsed = parseExpenseFields(data, memberIds, userId, currency);
       if ("error" in parsed) return parsed;
 
@@ -207,20 +214,33 @@ export async function deleteExpense(
   if (!expenseId) return fail("Expense id is required.");
 
   try {
-    const existing = await prisma.expense.findUnique({
-      where: { id: expenseId },
-      select: {
-        tripId: true,
-        paidById: true,
-        trip: { select: { members: { select: { userId: true, role: true } } } },
-      },
+    const outcome = await prisma.$transaction(async (tx): Promise<
+      { error: string } | { tripId: string }
+    > => {
+      const found = await tx.expense.findUnique({
+        where: { id: expenseId },
+        select: { tripId: true },
+      });
+      if (!found || !(await lockTripCurrency(tx, found.tripId))) {
+        return { error: "Expense not found." };
+      }
+      const existing = await tx.expense.findUnique({
+        where: { id: expenseId },
+        select: EXISTING_EXPENSE_SELECT,
+      });
+      const gate = payerOrOwnerGate(existing, userId, "delete");
+      if (gate) return { error: gate };
+      const memberIds = new Set(existing!.trip.members.map((m) => m.userId));
+      if (involvesDeparted(expenseParticipants(existing!), memberIds)) {
+        return { error: DEPARTED_MESSAGE };
+      }
+
+      await tx.expense.delete({ where: { id: expenseId } });
+      return { tripId: found.tripId };
     });
-    const gate = payerOrOwnerGate(existing, userId, "delete");
-    if (gate) return fail(gate);
+    if ("error" in outcome) return fail(outcome.error);
 
-    await prisma.expense.delete({ where: { id: expenseId } });
-
-    revalidateTripPages(existing!.tripId);
+    revalidateTripPages(outcome.tripId);
     return { success: true, data: { id: expenseId } };
   } catch (error) {
     console.error("deleteExpense failed:", error);
@@ -270,8 +290,6 @@ export async function recordSettlement(
         select: {
           currency: true,
           members: {
-            // Join order, as in getTripBalances, so both round alike.
-            orderBy: { createdAt: "asc" },
             select: { userId: true, role: true, user: { select: { name: true } } },
           },
           expenses: {
@@ -310,7 +328,6 @@ export async function recordSettlement(
         roundBalances(
           computeBalances({ expenses: trip.expenses, settlements: trip.settlements }),
           currencyUnitCents(trip.currency),
-          trip.members.map((m) => m.userId),
         ),
         fromUserId,
         toUserId,
@@ -355,29 +372,46 @@ export async function deleteSettlement(
   if (!settlementId) return fail("Repayment id is required.");
 
   try {
-    const existing = await prisma.settlement.findUnique({
-      where: { id: settlementId },
-      select: {
-        tripId: true,
-        fromUserId: true,
-        toUserId: true,
-        createdById: true,
-        trip: {
-          select: { members: { where: { userId }, select: { role: true } } },
+    const outcome = await prisma.$transaction(async (tx): Promise<
+      { error: string } | { tripId: string }
+    > => {
+      const found = await tx.settlement.findUnique({
+        where: { id: settlementId },
+        select: { tripId: true },
+      });
+      // Serialized with recording repayments and with members leaving, which
+      // both lock the trip row FOR UPDATE.
+      if (!found || !(await lockTripCurrency(tx, found.tripId))) {
+        return { error: "Repayment not found." };
+      }
+      const existing = await tx.settlement.findUnique({
+        where: { id: settlementId },
+        select: {
+          fromUserId: true,
+          toUserId: true,
+          createdById: true,
+          trip: { select: { members: { select: { userId: true, role: true } } } },
         },
-      },
+      });
+      const mine = existing?.trip.members.find((m) => m.userId === userId);
+      if (!existing || !mine) return { error: "Repayment not found." };
+      if (!canRemoveRepayment(mine.role, userId, existing)) {
+        return {
+          error:
+            "Only the people involved, whoever recorded it, or the owner can remove this repayment.",
+        };
+      }
+      const memberIds = new Set(existing.trip.members.map((m) => m.userId));
+      if (involvesDeparted([existing.fromUserId, existing.toUserId], memberIds)) {
+        return { error: DEPARTED_MESSAGE };
+      }
+
+      await tx.settlement.delete({ where: { id: settlementId } });
+      return { tripId: found.tripId };
     });
-    const mine = existing?.trip.members[0];
-    if (!existing || !mine) return fail("Repayment not found.");
-    if (!canRemoveRepayment(mine.role, userId, existing)) {
-      return fail(
-        "Only the people involved, whoever recorded it, or the owner can remove this repayment.",
-      );
-    }
+    if ("error" in outcome) return fail(outcome.error);
 
-    await prisma.settlement.delete({ where: { id: settlementId } });
-
-    revalidatePath(`/trips/${existing.tripId}/expenses`);
+    revalidatePath(`/trips/${outcome.tripId}/expenses`);
     return { success: true, data: { id: settlementId } };
   } catch (error) {
     console.error("deleteSettlement failed:", error);
@@ -514,7 +548,6 @@ export async function getTripBalances(
     const balances = roundBalances(
       computeBalances({ expenses: trip.expenses, settlements: trip.settlements }),
       currencyUnitCents(trip.currency),
-      memberOrder,
     );
 
     return {
@@ -586,6 +619,32 @@ function editGate(
     return `Viewers can't ${verb} on this trip.`;
   }
   return null;
+}
+
+const EXISTING_EXPENSE_SELECT = {
+  tripId: true,
+  paidById: true,
+  splits: { select: { userId: true } },
+  trip: { select: { members: { select: { userId: true, role: true } } } },
+} as const;
+
+function expenseParticipants(expense: {
+  paidById: string;
+  splits: { userId: string }[];
+}): string[] {
+  return [expense.paidById, ...expense.splits.map((s) => s.userId)];
+}
+
+/**
+ * Expenses and repayments involving someone who has left the trip are
+ * frozen. Leaving required a settled balance, so changing one of them would
+ * reopen a debt for a person who's no longer there to settle it.
+ */
+const DEPARTED_MESSAGE =
+  "This involves someone who has left the trip, so it can't be changed: their balance was settled when they left.";
+
+function involvesDeparted(userIds: string[], memberIds: Set<string>): boolean {
+  return userIds.some((id) => !memberIds.has(id));
 }
 
 /** Caller must be a member, and either the expense's payer or the trip OWNER. */

@@ -36,14 +36,17 @@ export function canEditTripDetails(role: TripRole): boolean {
   return role === "OWNER" || role === "EDITOR";
 }
 
-/** Who may create invite links: anyone who can plan the trip. */
+/**
+ * Who may create and list invite links: the owner only. Deciding who joins
+ * the trip, and with what role, stays with the person who manages members.
+ */
 export function canCreateInvite(role: TripRole): boolean {
-  return role === "OWNER" || role === "EDITOR";
+  return role === "OWNER";
 }
 
 /**
- * Who may revoke an invite link: the owner, or whoever created it — an editor
- * can take back a link they sent without being able to cancel the owner's.
+ * Who may revoke an invite link: the owner, or whoever created it — a former
+ * owner can still take back a link they sent after handing over the trip.
  */
 export function canRevokeInvite(
   role: TripRole,

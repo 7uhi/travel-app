@@ -212,8 +212,8 @@ export function computeBalances(input: BalanceInput): Map<string, number> {
 /**
  * Rounds net balances to whole currency units while keeping their zero sum:
  * each balance is floored to a unit, then the units flooring dropped go back
- * to the largest dropped remainders (ties in member order, as in
- * simplifyDebts).
+ * to the largest dropped remainders, ties broken by user id. Membership
+ * plays no part, so someone leaving the trip can't shift anyone's rounding.
  *
  * This only changes anything on a zero-decimal trip holding shares from
  * before whole units were enforced — ¥1000 split three ways as ¥333.34 +
@@ -226,7 +226,6 @@ export function computeBalances(input: BalanceInput): Map<string, number> {
 export function roundBalances(
   balances: Map<string, number>,
   unitCents: number,
-  memberOrder: string[] = [],
 ): Map<string, number> {
   const entries = [...balances].map(([userId, cents]) => {
     const units = Math.floor(cents / unitCents);
@@ -235,9 +234,9 @@ export function roundBalances(
   let leftover = Math.round(
     entries.reduce((s, e) => s + e.remainder, 0) / unitCents,
   );
-  const byMemberOrder = compareByMemberOrder(memberOrder);
   const order = [...entries].sort(
-    (a, b) => b.remainder - a.remainder || byMemberOrder(a.userId, b.userId),
+    (a, b) =>
+      b.remainder - a.remainder || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0),
   );
   for (const entry of order) {
     if (leftover <= 0) break;

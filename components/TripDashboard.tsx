@@ -54,6 +54,7 @@ export function TripDashboard({
         activeTab="itinerary"
         showTabs={showTabs}
         respondedCount={scheduled ? null : respondedCount}
+        readOnly={header === null && currentUserRole === null}
       />
 
       {preferencesNudge && (
