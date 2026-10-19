@@ -4,7 +4,16 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Types must match the Node version CI and Vercel run, not the newest one.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
+      # The Prisma CLI and client must stay on the same version, so every
+      # Prisma update (majors included) comes as one PR. Listed first because
+      # a dependency joins the first group it matches.
+      prisma:
+        patterns: ["prisma", "@prisma/*"]
       minor-and-patch:
         patterns: ["*"]
         update-types: [minor, patch]
