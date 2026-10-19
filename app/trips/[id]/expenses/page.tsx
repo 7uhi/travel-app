@@ -5,7 +5,8 @@ import {
   getTripExpenses,
   getTripSettlements,
 } from "@/actions/expense";
-import { getTripById } from "@/actions/trip";
+import { getTripMembers } from "@/actions/members";
+import { getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
@@ -13,6 +14,7 @@ import { AddExpenseButton } from "@/components/expenses/AddExpenseButton";
 import { BalancesPanel } from "@/components/expenses/BalancesPanel";
 import { CurrencyPicker } from "@/components/expenses/CurrencyPicker";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
+import { summarizeTripAmounts } from "@/lib/currencies";
 
 export default async function TripExpensesPage({
   params,
@@ -20,12 +22,14 @@ export default async function TripExpensesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, expensesRes, balancesRes, settlementsRes] = await Promise.all([
-    getTripById(id),
-    getTripExpenses(id),
-    getTripBalances(id),
-    getTripSettlements(id),
-  ]);
+  const [tripRes, expensesRes, balancesRes, settlementsRes, membersRes] =
+    await Promise.all([
+      getTripHeader(id),
+      getTripExpenses(id),
+      getTripBalances(id),
+      getTripSettlements(id),
+      getTripMembers(id),
+    ]);
 
   if (!tripRes.success) {
     if (tripRes.error === "Trip not found.") notFound();
@@ -36,27 +40,30 @@ export default async function TripExpensesPage({
   if (!settlementsRes.success) {
     return <LoadError message={settlementsRes.error} />;
   }
+  if (!membersRes.success) return <LoadError message={membersRes.error} />;
 
   const trip = tripRes.data;
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
-  const role =
-    trip.members.find((m) => m.userId === currentUserId)?.role ?? null;
+  const role = trip.role;
   const canEdit = role === "OWNER" || role === "EDITOR";
 
-  const members = trip.members.map((m) => ({
+  // Current members only: people who left still appear in the expense and
+  // repayment history (named from those rows), but can't be picked anew.
+  const members = membersRes.data.map((m) => ({
     id: m.userId,
-    name: m.user.name ?? m.user.email,
+    name: m.name ?? m.email,
   }));
+  const amounts = summarizeTripAmounts({
+    totalBudget: trip.totalBudget,
+    expenses: expensesRes.data,
+    settlementCents: settlementsRes.data.map((s) => s.amountCents),
+    plannedCost: trip.plannedCost,
+  });
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <TripHeader
-        trip={trip}
-        currentUserRole={role}
-        activeTab="expenses"
-        spentCents={expensesRes.data.reduce((s, e) => s + e.amountCents, 0)}
-      />
+      <TripHeader trip={trip} activeTab="expenses" />
 
       <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -67,7 +74,8 @@ export default async function TripExpensesPage({
                 <CurrencyPicker
                   tripId={trip.id}
                   currency={trip.currency}
-                  hasExpenses={expensesRes.data.length > 0}
+                  example={amounts.example}
+                  fractional={amounts.fractional}
                 />
               )}
               {canEdit && currentUserId && (

@@ -35,6 +35,7 @@ export default async function ProfileOnboardingPage({
       </p>
       <PreferenceDeck
         mode="profile"
+        userId={session.user.id}
         profile={profileRes.data}
         returnTo={returnTo}
       />

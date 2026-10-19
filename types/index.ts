@@ -269,6 +269,23 @@ export interface TripBalances {
   suggestedPayments: SuggestedPayment[];
 }
 
+/** A real amount from a trip, named so a confirmation can show what happens to it. */
+export interface TripAmountExample {
+  /** e.g. `“Dinner at Time Out”` or `the trip budget` */
+  label: string;
+  cents: number;
+}
+
+/** Options for updateTripCurrency. */
+export interface CurrencyChangeOptions {
+  /**
+   * Required once the trip holds any amount: the caller confirms those
+   * amounts keep their numbers under the new code rather than being
+   * converted.
+   */
+  relabel?: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /* Create payloads (id/timestamps assigned by the database).            */
 /* Nullable columns are also optional keys so form code can just        */
@@ -294,6 +311,9 @@ export interface TripInput {
   windowEnd?: string;
   /** Desired trip length in days */
   durationDays?: number;
+  /** ISO 4217 code from lib/currencies; defaults to USD. */
+  currency?: string;
+  /** In `currency`, major units; whole numbers for zero-decimal currencies. */
   totalBudget?: number | null;
 }
 
@@ -528,3 +548,89 @@ export interface MyPreferences {
  * answers are strings; multi-select answers are string arrays.
  */
 export type PreferenceAnswers = Record<string, string | string[]>;
+
+/* ------------------------------------------------------------------ */
+/* Trip header, lifecycle, membership, and sharing                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Everything a trip page's header shows, returned by getTripHeader. Every
+ * section loads the same contract so the hero and stat cards mean the same
+ * thing on every tab; only the itinerary tab also loads the full day plan.
+ */
+export interface TripHeaderData extends Omit<Trip, "createdAt" | "updatedAt"> {
+  /** The viewer's role on the trip. */
+  role: TripRole;
+  /** ISO datetime the viewer hid the trip from their list; null when shown. */
+  archivedAt: string | null;
+  memberCount: number;
+  ownerName: string | null;
+  dayCount: number;
+  /** Days with at least one activity. */
+  plannedDayCount: number;
+  activityCount: number;
+  /** Sum of the itinerary's activity costs, in currency units. */
+  plannedCost: number;
+  /**
+   * Total logged expenses in cents. getTripHeader always loads it; null only
+   * for header data built without expense access (the static /preview demo).
+   */
+  spentCents: number | null;
+}
+
+/** A row on the signed-in user's trip list, with their own hidden state. */
+export interface MyTripSummary extends TripSummary {
+  /** ISO datetime the user hid this trip from their list; null when shown. */
+  archivedAt: string | null;
+}
+
+/** Arguments for updateTripDetails. */
+export interface TripDetailsInput {
+  title: string;
+  /** Empty or null puts the trip back to "destination not decided". */
+  destination?: string | null;
+}
+
+/** Arguments for rescheduleTrip: the new inclusive range (YYYY-MM-DD). */
+export interface RescheduleInput {
+  startDate: string;
+  endDate: string;
+}
+
+/** Returned by rescheduleTrip. */
+export interface RescheduleResult {
+  /** ISO dates of the new range. */
+  startDate: string;
+  endDate: string;
+  /** Whole days every day and activity time moved by (negative = earlier). */
+  shiftDays: number;
+  addedDays: number;
+  removedDays: number;
+}
+
+/** One member as listed by getTripMembers. */
+export interface TripMemberDetail {
+  userId: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  role: TripRole;
+  /** ISO datetime they joined. */
+  joinedAt: string;
+  /** This row is the signed-in user. */
+  isYou: boolean;
+}
+
+/** An invite link that still admits people (unexpired and not revoked). */
+export interface ActiveInvite {
+  id: string;
+  url: string;
+  role: InviteRole;
+  /** ISO datetime */
+  expiresAt: string;
+  /** ISO datetime */
+  createdAt: string;
+  createdBy: PersonSummary;
+  /** Whether the viewer may revoke it (the owner, or whoever created it). */
+  canRevoke: boolean;
+}

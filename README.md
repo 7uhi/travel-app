@@ -60,9 +60,10 @@ Actions in `actions/`, and the only API route is the Auth.js handler.
 auth.ts / auth.config.ts / middleware.ts   Auth wiring (see below)
 prisma/schema.prisma                       Data model + migrations
 actions/                                   Server actions — the "backend"
-  trip.ts        trips, days, activities
+  trip.ts        trips, days, activities, trip header, edit/reschedule/delete/hide
+  members.ts     member list, leaving, removal, roles, ownership transfer
   expense.ts     expenses, splits, settlements, balances
-  invite.ts      invite links
+  invite.ts      invite links (create, list, revoke, accept)
   preferences.ts travel profiles + per-trip preference answers
 lib/
   split.ts     pure expense-splitting math (integer cents)
@@ -96,15 +97,47 @@ components/                                UI (server + client components)
   `OWNER`, `EDITOR`, or `VIEWER`. Viewers can't edit the itinerary,
   expenses, or shared packing list; they can still vote on ideas, answer the
   group questions, mark their own availability, keep a personal packing list,
-  and record repayments they made or received. `Invite` tokens are multi-use, expire after 7 days, and grant
-  `EDITOR` or `VIEWER` — never `OWNER`. Opening an invite link only shows
-  a preview; joining is an explicit POST from its Join button.
+  and record repayments they made or received. Owners and editors can edit
+  the trip's title and destination; only the owner reschedules it, deletes it
+  (by typing its title), or manages members — changing roles between
+  `EDITOR` and `VIEWER`, removing people, and handing over ownership (the
+  old owner stays on as an editor, so there's always exactly one `OWNER`).
+  Anyone except the owner can leave. Leaving or being removed is refused while
+  that member's balance isn't zero, so nobody walks away from a debt the
+  ledger still shows; their past expenses and repayments stay on the trip.
+- **Rescheduling keeps day N as day N.** Moving the dates shifts every
+  `TripDay` (and its activities) by the same offset. Shortening drops days
+  off the end, and is refused while any of those days still has activities.
+- **Hiding is per member.** `TripMember.archivedAt` moves a trip into a
+  collapsed "Archived" section of *your* trip list without touching anyone
+  else's.
+- **Invites.** `Invite` tokens are multi-use, expire after 7 days, and grant
+  `EDITOR` or `VIEWER` — never `OWNER`. Only the owner creates them and
+  sees the trip's active links; a link can be revoked by the owner or whoever
+  created it (a former owner keeps that for links they sent). Revoking
+  sets `Invite.revokedAt` rather than deleting the row, so opening a
+  revoked link says it was revoked instead of looking like a mistyped URL.
+  Opening an invite link only shows a preview; joining is an explicit POST
+  from its Join button.
 - **Expenses.** `Expense` → `ExpenseSplit` (one share per participant) plus
   `Settlement` for recorded repayments. All money is stored as **integer
-  cents**; each trip has a single currency, and an expense's shares always sum
-  to its amount. A repayment can't exceed what the balances support, records
-  who entered it, and can be removed by the people involved, its recorder, or
-  the owner.
+  cents** (hundredths of the major unit, whatever the currency), and an
+  expense's shares always sum to its amount. Any member, viewers included,
+  can open an expense to see who paid and each person's share. A repayment
+  can't exceed what the balances support, records who entered it, and can be
+  removed by the people involved, its recorder, or the owner.
+- **One currency per trip, never converted.** It's picked when the trip is
+  created. Each currency has a *unit* in those hundredths
+  (`lib/currencies.ts`, derived from `Intl`): 1 for cent currencies, 100 for
+  zero-decimal ones like JPY, KRW, and VND. Expense amounts, shares,
+  repayments, and the budget must be whole units, and splits hand out whole
+  units — ¥1000 three ways is ¥334 + ¥333 + ¥333, never ¥333.33s. Balances
+  are rounded to whole units (sum-preserving) before settling up, which only
+  matters for fractional shares stored before this rule. Changing the
+  currency *relabels* amounts instead of converting them: that's silent only
+  while the trip holds no amounts; otherwise the owner confirms an example and
+  `updateTripCurrency` requires `relabel: true`. Switching to a zero-decimal
+  currency is refused while any amount has cents.
 - **Preferences, in two layers, asked at two moments.** `TravelProfile` is one
   row per *user* — durable taste (pace, budget tier, rhythm, lodging) that
   outlives any single trip. It's collected by the account-level deck at

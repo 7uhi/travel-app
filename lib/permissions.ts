@@ -30,3 +30,44 @@ export function canRemoveRepayment(
     actorId === repayment.toUserId
   );
 }
+
+/** Title and destination are part of planning, so editors may change them. */
+export function canEditTripDetails(role: TripRole): boolean {
+  return role === "OWNER" || role === "EDITOR";
+}
+
+/**
+ * Who may create and list invite links: the owner only. Deciding who joins
+ * the trip, and with what role, stays with the person who manages members.
+ */
+export function canCreateInvite(role: TripRole): boolean {
+  return role === "OWNER";
+}
+
+/**
+ * Who may revoke an invite link: the owner, or whoever created it — a former
+ * owner can still take back a link they sent after handing over the trip.
+ */
+export function canRevokeInvite(
+  role: TripRole,
+  actorId: string,
+  invite: { createdById: string },
+): boolean {
+  return role === "OWNER" || actorId === invite.createdById;
+}
+
+/**
+ * Removing members, changing roles, and handing over ownership are the
+ * owner's alone; there is exactly one owner per trip.
+ */
+export function canManageMembers(role: TripRole): boolean {
+  return role === "OWNER";
+}
+
+/**
+ * Anyone but the owner may leave. The owner hands ownership to someone else
+ * first, so a trip is never left without one.
+ */
+export function canLeaveTrip(role: TripRole): boolean {
+  return role !== "OWNER";
+}

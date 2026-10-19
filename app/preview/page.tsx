@@ -1,10 +1,12 @@
+import Link from "next/link";
+
 import { TripDashboard } from "@/components/TripDashboard";
 import type { TripWithDays } from "@/types";
 
 /**
- * Design preview: renders the trip dashboard from mock data so the UI can be
- * seen and iterated on before a database is connected. Safe to delete once
- * /trips/[id] is backed by real data.
+ * The public sample trip linked from the landing page: the real dashboard
+ * rendered from mock data. It renders with no membership role, so every
+ * mutation control is hidden — there's no trip behind it to change.
  */
 
 const T = "2026-06-20T10:00:00.000Z"; // shared createdAt/updatedAt for mock rows
@@ -211,9 +213,24 @@ const mockTrip: TripWithDays = {
 };
 
 export default function PreviewPage() {
-  // OWNER so owner-only UI (e.g. the Share button) is visible in the demo.
   // Tabs are hidden because the mock trip has no real routes behind them.
   return (
-    <TripDashboard trip={mockTrip} currentUserRole="OWNER" showTabs={false} />
+    <>
+      <div className="border-b border-stone-200 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 text-sm sm:px-6">
+          <p className="text-stone-700">
+            <span className="font-medium text-ink">Sample trip.</span> A
+            read-only look at a planned trip; the people and plans are made up.
+          </p>
+          <Link
+            href="/"
+            className="font-medium text-pine transition-colors hover:text-pine-dark"
+          >
+            Plan your own →
+          </Link>
+        </div>
+      </div>
+      <TripDashboard trip={mockTrip} currentUserRole={null} showTabs={false} />
+    </>
   );
 }

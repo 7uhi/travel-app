@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getTripSpentCents } from "@/actions/expense";
 import { getTripPreferences } from "@/actions/preferences";
-import { getTripById } from "@/actions/trip";
+import { getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
@@ -11,6 +10,7 @@ import { ConflictList } from "@/components/preferences/ConflictList";
 import { GroupConsensusPanel } from "@/components/preferences/GroupConsensusPanel";
 import { MemberPreferenceCard } from "@/components/preferences/MemberPreferenceCard";
 import { ResetTripPreferencesButton } from "@/components/preferences/ResetTripPreferencesButton";
+import { canEditTripDetails } from "@/lib/permissions";
 import {
   aggregateGroupProfile,
   aggregateTripPreferences,
@@ -24,10 +24,9 @@ export default async function TripPreferencesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, prefsRes, spentRes] = await Promise.all([
-    getTripById(id),
+  const [tripRes, prefsRes] = await Promise.all([
+    getTripHeader(id),
     getTripPreferences(id),
-    getTripSpentCents(id),
   ]);
 
   if (!tripRes.success) {
@@ -40,8 +39,6 @@ export default async function TripPreferencesPage({
   const members = prefsRes.data;
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
-  const role =
-    trip.members.find((m) => m.userId === currentUserId)?.role ?? null;
 
   /*
    * Aggregation runs on the server: no member data or math ships to the client.
@@ -66,12 +63,7 @@ export default async function TripPreferencesPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <TripHeader
-        trip={trip}
-        currentUserRole={role}
-        activeTab="preferences"
-        spentCents={spentRes.success ? spentRes.data : null}
-      />
+      <TripHeader trip={trip} activeTab="preferences" />
 
       <section className="mt-10">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -80,7 +72,12 @@ export default async function TripPreferencesPage({
               trip's answers, the profile they're inherited from, and the way
               back to inheriting them again. */}
           <div className="flex flex-wrap items-center gap-1">
-            {mine?.trip && <ResetTripPreferencesButton tripId={trip.id} />}
+            {mine?.trip && currentUserId && (
+              <ResetTripPreferencesButton
+                tripId={trip.id}
+                userId={currentUserId}
+              />
+            )}
             <Link
               href={`/onboarding?next=/trips/${trip.id}/preferences`}
               className="rounded-full px-3 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
@@ -97,9 +94,9 @@ export default async function TripPreferencesPage({
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-          {/* items-start: the aside is far taller than a member card, and
-              stretched cards are mostly empty white. */}
-          <div className="grid items-start gap-4 sm:grid-cols-2">
+          {/* items-start/content-start: the aside is far taller than a member
+              card, and stretched cards (or rows) are mostly empty white. */}
+          <div className="grid content-start items-start gap-4 sm:grid-cols-2">
             {members.map((member) => (
               <MemberPreferenceCard
                 key={member.userId}
@@ -116,6 +113,11 @@ export default async function TripPreferencesPage({
               groupTrip={groupTrip}
               memberCount={members.length}
               destinationUndecided={trip.destination === null}
+              setDestinationFor={
+                canEditTripDetails(trip.role)
+                  ? { tripId: trip.id, title: trip.title }
+                  : null
+              }
             />
             <ConflictList conflicts={conflicts} names={names} />
           </aside>

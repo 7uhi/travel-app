@@ -3,13 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   checkSharesTotal,
   computeBalances,
+  isEqualSplit,
   maxRepaymentCents,
   prorate,
+  roundBalances,
   simplifyDebts,
   splitByPercent,
   splitEqual,
+  validateExactShares,
   type Payment,
 } from "./split";
+
+/** One yen in stored hundredths — the unit of a zero-decimal currency. */
+const YEN = 100;
 
 const w = (userId: string, weightCents: number) => ({ userId, weightCents });
 
@@ -21,6 +27,39 @@ describe("splitEqual", () => {
     expect(splitEqual(1000, ["a", "b", "c"]).map((s) => s.amountCents)).toEqual(
       [334, 333, 333],
     );
+  });
+
+  it("splits ¥1000 three ways into whole yen, leftover yen first", () => {
+    expect(
+      splitEqual(1_000 * YEN, ["a", "b", "c"], YEN).map((s) => s.amountCents),
+    ).toEqual([334 * YEN, 333 * YEN, 333 * YEN]);
+  });
+
+  it("always sums to the total in whole units, deterministically", () => {
+    for (const total of [1, 2, 7, 999, 1_000, 123_457]) {
+      for (const n of [1, 2, 3, 4, 7]) {
+        const ids = Array.from({ length: n }, (_, i) => `u${i}`);
+        const shares = splitEqual(total * YEN, ids, YEN);
+        expect(sum(shares)).toBe(total * YEN);
+        expect(shares.every((s) => s.amountCents % YEN === 0)).toBe(true);
+        expect(splitEqual(total * YEN, ids, YEN)).toEqual(shares);
+        expect(checkSharesTotal(total * YEN, shares, YEN)).toBeNull();
+      }
+    }
+  });
+
+  it("rejects a total that isn't a whole unit", () => {
+    expect(() => splitEqual(100_050, ["a", "b"], YEN)).toThrow();
+  });
+});
+
+describe("isEqualSplit", () => {
+  it("allows the one-unit leftover an equal split leaves", () => {
+    expect(isEqualSplit([334, 333, 333])).toBe(true);
+    expect(isEqualSplit([334 * YEN, 333 * YEN, 333 * YEN], YEN)).toBe(true);
+    expect(isEqualSplit([334 * YEN, 333 * YEN, 333 * YEN])).toBe(false);
+    expect(isEqualSplit([600, 400])).toBe(false);
+    expect(isEqualSplit([])).toBe(false);
   });
 });
 
@@ -62,6 +101,34 @@ describe("splitByPercent", () => {
     expect(() => splitByPercent(100, shares(33.35, 33.33, 33.34))).toThrow();
   });
 
+  it("hands out whole yen by largest remainder, summing to the total", () => {
+    // ¥999 at 25/75: raw ¥249.75 / ¥749.25 → floors 249 + 749, and the one
+    // leftover yen goes to the larger remainder.
+    expect(
+      splitByPercent(
+        999 * YEN,
+        [
+          { userId: "a", percent: 25 },
+          { userId: "b", percent: 75 },
+        ],
+        YEN,
+      ),
+    ).toEqual([
+      { userId: "a", amountCents: 250 * YEN },
+      { userId: "b", amountCents: 749 * YEN },
+    ]);
+
+    for (const total of [1, 10, 999, 1_000, 54_321]) {
+      const shares = splitByPercent(
+        total * YEN,
+        [33.33, 33.33, 33.34].map((percent, i) => ({ userId: `u${i}`, percent })),
+        YEN,
+      );
+      expect(sum(shares)).toBe(total * YEN);
+      expect(checkSharesTotal(total * YEN, shares, YEN)).toBeNull();
+    }
+  });
+
   it("rejects totals outside the tolerance and non-finite percentages", () => {
     const share = (percent: number) => ({ userId: "a", percent });
     expect(() => splitByPercent(100, [share(99.9)])).toThrow();
@@ -82,12 +149,35 @@ describe("checkSharesTotal", () => {
     expect(checkSharesTotal(1, [s("a", 1), s("b", 0), s("c", 0)])).toBeNull();
   });
 
+  it("rejects shares that aren't whole units", () => {
+    expect(checkSharesTotal(1_000 * YEN, [s("a", 50_050), s("b", 49_950)], YEN))
+      .not.toBeNull();
+    expect(checkSharesTotal(1_000 * YEN, [s("a", 50_000), s("b", 50_000)], YEN))
+      .toBeNull();
+  });
+
   it("rejects mismatched sums, fractions, negatives, and duplicates", () => {
     expect(checkSharesTotal(100, [s("a", 60), s("b", 50)])).not.toBeNull();
     expect(checkSharesTotal(100, [s("a", 49.5), s("b", 50.5)])).not.toBeNull();
     expect(checkSharesTotal(100, [s("a", 150), s("b", -50)])).not.toBeNull();
     expect(checkSharesTotal(100, [s("a", 50), s("a", 50)])).not.toBeNull();
     expect(checkSharesTotal(100, [])).not.toBeNull();
+  });
+});
+
+describe("validateExactShares", () => {
+  const s = (userId: string, amountCents: number) => ({ userId, amountCents });
+
+  it("requires whole units and reports totals in the currency's decimals", () => {
+    expect(validateExactShares(1_000 * YEN, [s("a", 33_333), s("b", 66_667)], YEN))
+      .toMatch(/whole number/);
+    expect(validateExactShares(1_000 * YEN, [s("a", 30_000), s("b", 60_000)], YEN))
+      .toBe("Shares add up to 900 but the expense total is 1000.");
+    expect(validateExactShares(1_000, [s("a", 300), s("b", 600)])).toBe(
+      "Shares add up to 9.00 but the expense total is 10.00.",
+    );
+    expect(validateExactShares(1_000 * YEN, [s("a", 40_000), s("b", 60_000)], YEN))
+      .toBeNull();
   });
 });
 
@@ -137,6 +227,18 @@ describe("prorate", () => {
       { userId: "b", amountCents: 334 },
       { userId: "c", amountCents: 333 },
     ]);
+  });
+
+  it("prorates whole yen, leftover to the largest remainder", () => {
+    // ¥101 tax over ¥500 / ¥300 / ¥200 items: raw ¥50.5 / ¥30.3 / ¥20.2.
+    expect(
+      prorate(101 * YEN, [w("a", 500 * YEN), w("b", 300 * YEN), w("c", 200 * YEN)], YEN),
+    ).toEqual([
+      { userId: "a", amountCents: 51 * YEN },
+      { userId: "b", amountCents: 30 * YEN },
+      { userId: "c", amountCents: 20 * YEN },
+    ]);
+    expect(() => prorate(10_050, [w("a", 100)], YEN)).toThrow();
   });
 
   it("returns all-zero shares for a zero extra", () => {
@@ -250,6 +352,104 @@ describe("simplifyDebts", () => {
 
   it("returns no payments when everyone is settled", () => {
     expect(simplifyDebts(new Map([["kevin", 0]]), MEMBER_ORDER)).toEqual([]);
+  });
+});
+
+describe("roundBalances", () => {
+  // ¥1000 paid by alex, stored before whole yen were enforced as
+  // ¥333.34 / ¥333.33 / ¥333.33.
+  const legacy = computeBalances({
+    expenses: [
+      {
+        paidById: "alex",
+        amountCents: 100_000,
+        splits: [
+          { userId: "alex", amountCents: 33_334 },
+          { userId: "sam", amountCents: 33_333 },
+          { userId: "taylor", amountCents: 33_333 },
+        ],
+      },
+    ],
+    settlements: [],
+  });
+  const order = ["alex", "sam", "taylor"];
+
+  it("leaves cent balances alone", () => {
+    const balances = new Map([
+      ["a", 1_001],
+      ["b", -667],
+      ["c", -334],
+    ]);
+    expect(roundBalances(balances, 1)).toEqual(balances);
+  });
+
+  it("rounds to whole yen without breaking the zero sum", () => {
+    const rounded = roundBalances(legacy, YEN);
+    expect(rounded).toEqual(
+      new Map([
+        ["alex", 666 * YEN],
+        ["sam", -333 * YEN],
+        ["taylor", -333 * YEN],
+      ]),
+    );
+  });
+
+  it("makes settle-up suggestions and the repayment cap whole yen", () => {
+    const rounded = roundBalances(legacy, YEN);
+    const payments = simplifyDebts(rounded, order);
+    expect(payments).toEqual([
+      { fromUserId: "sam", toUserId: "alex", amountCents: 333 * YEN },
+      { fromUserId: "taylor", toUserId: "alex", amountCents: 333 * YEN },
+    ]);
+    expect(maxRepaymentCents(rounded, "sam", "alex")).toBe(333 * YEN);
+  });
+
+  it("holds still while the group pays the rounded suggestions", () => {
+    let raw = legacy;
+    for (const payment of simplifyDebts(roundBalances(legacy, YEN), order)) {
+      const before = roundBalances(raw, YEN);
+      raw = settle(raw, [payment]);
+      expect(roundBalances(raw, YEN)).toEqual(settle(before, [payment]));
+    }
+    for (const cents of roundBalances(raw, YEN).values()) {
+      expect(cents).toBe(0);
+    }
+  });
+
+  it("breaks remainder ties by user id, whoever is still a member", () => {
+    const tied = new Map([
+      ["b", -50],
+      ["a", 50],
+    ]);
+    expect(roundBalances(tied, YEN)).toEqual(
+      new Map([
+        ["b", -100],
+        ["a", 100],
+      ]),
+    );
+  });
+
+  it("stays within one unit of every balance and sums to zero", () => {
+    let seed = 7;
+    const next = () => (seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648);
+    for (let trial = 0; trial < 50; trial++) {
+      const ids = ["a", "b", "c", "d", "e"].slice(0, 2 + (next() % 4));
+      const expenses = Array.from({ length: 1 + (next() % 6) }, () => {
+        const amountCents = 1 + (next() % 500_000);
+        return {
+          paidById: ids[next() % ids.length],
+          amountCents,
+          splits: splitEqual(amountCents, ids),
+        };
+      });
+      const raw = computeBalances({ expenses, settlements: [] });
+      const rounded = roundBalances(raw, YEN);
+      expect([...rounded.values()].reduce((a, b) => a + b, 0)).toBe(0);
+      for (const [id, cents] of rounded) {
+        expect(Number.isInteger(cents / YEN)).toBe(true);
+        expect(Math.abs(cents - raw.get(id)!)).toBeLessThan(YEN);
+      }
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+import { SetDestinationButton } from "@/components/trip/SetDestinationButton";
 import {
   INTEREST_EMOJI,
   INTEREST_LABELS,
@@ -34,11 +35,14 @@ export function GroupConsensusPanel({
   groupTrip,
   memberCount,
   destinationUndecided,
+  setDestinationFor = null,
 }: {
   group: GroupProfile;
   groupTrip: GroupTripPreference;
   memberCount: number;
   destinationUndecided: boolean;
+  /** Set when the viewer may edit the trip, so they can act on the answers. */
+  setDestinationFor?: { tripId: string; title: string } | null;
 }) {
   const liked = group.interests.filter((i) => !i.vetoed && i.score > 0);
 
@@ -155,6 +159,18 @@ export function GroupConsensusPanel({
                 </Row>
               )}
             </dl>
+          )}
+          {setDestinationFor && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-3">
+              <p className="text-xs text-stone-600">
+                Agreed on a place? Set it so the plan can start.
+              </p>
+              <SetDestinationButton
+                tripId={setDestinationFor.tripId}
+                title={setDestinationFor.title}
+                tone="panel"
+              />
+            </div>
           )}
         </div>
       )}

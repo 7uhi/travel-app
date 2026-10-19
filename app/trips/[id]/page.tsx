@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { getTripAvailability } from "@/actions/availability";
-import { getTripSpentCents } from "@/actions/expense";
 import { getMyPreferenceStatus } from "@/actions/preferences";
-import { getTripById } from "@/actions/trip";
+import { getTripById, getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripDashboard } from "@/components/TripDashboard";
@@ -14,11 +13,16 @@ export default async function TripPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [result, spentRes] = await Promise.all([
+  // The itinerary tab is the one section that shows the full day plan.
+  const [headerRes, result] = await Promise.all([
+    getTripHeader(id),
     getTripById(id),
-    getTripSpentCents(id),
   ]);
 
+  if (!headerRes.success) {
+    if (headerRes.error === "Trip not found.") notFound();
+    return <LoadError message={headerRes.error} />;
+  }
   if (!result.success) {
     if (result.error === "Trip not found.") notFound();
     return <LoadError message={result.error} />;
@@ -26,8 +30,6 @@ export default async function TripPage({
 
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
-  const currentUserRole =
-    result.data.members.find((m) => m.userId === currentUserId)?.role ?? null;
 
   // The date poll only matters while the trip has no dates yet.
   let availability = null;
@@ -53,10 +55,9 @@ export default async function TripPage({
   return (
     <TripDashboard
       trip={result.data}
-      currentUserRole={currentUserRole}
+      header={headerRes.data}
       availability={availability}
       currentUserId={currentUserId}
-      spentCents={spentRes.success ? spentRes.data : null}
       preferencesNudge={preferencesNudge}
     />
   );

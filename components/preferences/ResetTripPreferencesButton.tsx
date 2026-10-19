@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { clearMyTripPreferences } from "@/actions/preferences";
+import { preferenceDraftKey } from "@/lib/preference-drafts";
 
 /**
  * Drops the viewer's trip-specific answers so this trip falls back to their
@@ -15,7 +16,13 @@ import { clearMyTripPreferences } from "@/actions/preferences";
  * Confirms inline rather than with window.confirm, matching AvailabilityPlanner
  * and keeping the flow non-blocking.
  */
-export function ResetTripPreferencesButton({ tripId }: { tripId: string }) {
+export function ResetTripPreferencesButton({
+  tripId,
+  userId,
+}: {
+  tripId: string;
+  userId: string;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -31,7 +38,7 @@ export function ResetTripPreferencesButton({ tripId }: { tripId: string }) {
       // A half-finished deck run for this trip is stored client-side; leaving
       // it would resurrect the answers we just cleared on the next visit.
       try {
-        sessionStorage.removeItem(`roam.prefs-draft.${tripId}`);
+        sessionStorage.removeItem(preferenceDraftKey(userId, tripId));
       } catch {
         // Nothing stored, nothing to clear.
       }

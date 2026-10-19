@@ -9,6 +9,7 @@ import {
   saveMyProfile,
   saveMyTripPreferences,
 } from "@/actions/preferences";
+import { preferenceDraftKey } from "@/lib/preference-drafts";
 import {
   INTEREST_LABELS,
   PROFILE_QUESTIONS,
@@ -42,6 +43,7 @@ import type {
  */
 export function PreferenceDeck({
   mode,
+  userId,
   tripId,
   destination = null,
   profile,
@@ -49,6 +51,8 @@ export function PreferenceDeck({
   returnTo,
 }: {
   mode: "profile" | "trip";
+  /** The signed-in member; scopes the resumable draft to their account. */
+  userId: string;
   /** Required in trip mode. */
   tripId?: string;
   destination?: string | null;
@@ -71,8 +75,10 @@ export function PreferenceDeck({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const draftKey =
-    mode === "profile" ? "roam.prefs-draft.profile" : `roam.prefs-draft.${tripId}`;
+  const draftKey = preferenceDraftKey(
+    userId,
+    mode === "trip" ? tripId : undefined,
+  );
 
   /*
    * A run lives in component state until the final save, so any remount —

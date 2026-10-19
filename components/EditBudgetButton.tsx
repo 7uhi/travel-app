@@ -5,11 +5,18 @@ import { useRouter } from "next/navigation";
 import { Pencil, X } from "lucide-react";
 
 import { updateTripBudget } from "@/actions/trip";
+import {
+  amountInputProps,
+  isWholeUnit,
+  isZeroDecimal,
+  parseAmountInput,
+} from "@/lib/currencies";
 import { formatCurrency } from "@/lib/format";
 
 /**
  * Owner-only hero chip: shows the trip budget and opens a small dialog to
- * set, change, or remove it. Non-owners see the static chip in TripHeader.
+ * set, change, or remove it, in the trip's currency (whole numbers for
+ * zero-decimal ones). Non-owners see the static chip in TripHeader.
  */
 export function EditBudgetButton({
   tripId,
@@ -60,6 +67,10 @@ export function EditBudgetButton({
       setError("Budget must be a non-negative number.");
       return;
     }
+    if (!isWholeUnit(parseAmountInput(raw), currency)) {
+      setError(`${currency} has no decimal places — enter a whole number.`);
+      return;
+    }
     save(parsed);
   }
 
@@ -103,13 +114,12 @@ export function EditBudgetButton({
             <form onSubmit={submit} className="space-y-4">
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
-                  Budget ({currency}) — whole trip
+                  Budget in {currency} — whole trip
                 </span>
                 <input
-                  type="number"
+                  {...amountInputProps(currency)}
                   min="0"
-                  step="0.01"
-                  placeholder="2000.00"
+                  placeholder={isZeroDecimal(currency) ? "2000" : "2000.00"}
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   autoFocus

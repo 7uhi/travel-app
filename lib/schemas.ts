@@ -29,6 +29,9 @@ export const INVALID_INPUT = "That request wasn't in the expected format.";
 
 export const idSchema = id;
 
+/** An ISO 4217 code; actions check it against lib/currencies for a specific message. */
+export const currencySchema = z.string().max(3);
+
 export const tripInputSchema: z.ZodType<TripInput> = z.object({
   title: text,
   destination: text.optional(),
@@ -37,6 +40,7 @@ export const tripInputSchema: z.ZodType<TripInput> = z.object({
   windowStart: text.optional(),
   windowEnd: text.optional(),
   durationDays: numeric.optional(),
+  currency: currencySchema.optional(),
   totalBudget: numeric.nullish(),
 });
 
@@ -124,3 +128,22 @@ export function parseInput<T>(schema: z.ZodType<T>, value: unknown): T | null {
   const result = schema.safeParse(value);
   return result.success ? result.data : null;
 }
+
+/* Trip lifecycle, membership, and sharing */
+
+export const tripDetailsInputSchema = z.object({
+  title: text,
+  destination: text.nullish(),
+});
+
+export const rescheduleInputSchema = z.object({
+  startDate: text,
+  endDate: text,
+});
+
+export const deleteTripConfirmationSchema = text;
+
+export const archivedFlagSchema = z.boolean();
+
+/** Roles a member can be moved between; ownership only moves by transfer. */
+export const memberRoleSchema = z.enum(["EDITOR", "VIEWER"]);
