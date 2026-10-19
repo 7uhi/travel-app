@@ -124,7 +124,7 @@ export function TripActionsMenu({ trip }: { trip: TripHeaderData }) {
         aria-controls={panelId}
         aria-label="Trip options"
         aria-disabled={pending || undefined}
-        className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-white/25 bg-white/15 backdrop-blur transition-colors hover:bg-white/25 aria-disabled:opacity-60"
+        className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-white/30 bg-black/35 backdrop-blur transition-colors hover:bg-black/45 aria-disabled:opacity-60"
       >
         <MoreHorizontal size={16} aria-hidden />
       </button>

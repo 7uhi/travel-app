@@ -88,7 +88,7 @@ export function EditBudgetButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-white/25"
+        className="flex items-center gap-1.5 rounded-full border border-white/30 bg-black/35 px-3.5 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-black/45"
       >
         <Pencil size={12} />
         {totalBudget !== null

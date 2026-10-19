@@ -39,7 +39,7 @@ export function ShareTripButton({ tripId }: { tripId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-white/25"
+        className="flex items-center gap-2 rounded-full border border-white/30 bg-black/35 px-3.5 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-black/45"
       >
         <Share2 size={14} aria-hidden />
         Share

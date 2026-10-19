@@ -123,7 +123,7 @@ export function TripHeader({
 
       {/* Hero. No overflow clipping: the trip options menu opens below it. */}
       <section
-        className={`relative bg-[linear-gradient(135deg,#e29a5b_0%,#c06b5e_45%,#54314e_100%)] text-white sm:rounded-3xl sm:px-10 sm:py-12 ${layout(
+        className={`relative bg-[linear-gradient(to_top,rgb(28_25_23/0.42)_0%,rgb(28_25_23/0.2)_50%,rgb(28_25_23/0)_85%),linear-gradient(135deg,#e29a5b_0%,#c06b5e_45%,#54314e_100%)] text-white sm:rounded-3xl sm:px-10 sm:py-12 ${layout(
           "rounded-2xl px-4 py-4",
           "rounded-3xl px-6 py-8",
         )}`}
@@ -131,12 +131,12 @@ export function TripHeader({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <span className="flex flex-wrap items-center gap-2">
             <span
-              className={`rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur ${layout("hidden sm:block", "")}`}
+              className={`rounded-full border border-white/30 bg-black/35 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] backdrop-blur ${layout("hidden sm:block", "")}`}
             >
               {statusChip}
             </span>
             {trip.archivedAt && (
-              <span className="flex items-center gap-1.5 rounded-full bg-black/20 px-3 py-1.5 text-xs font-medium">
+              <span className="flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1.5 text-xs font-medium">
                 <EyeOff size={12} aria-hidden />
                 Hidden from your trips
               </span>
@@ -153,7 +153,7 @@ export function TripHeader({
               />
             ) : (
               trip.totalBudget !== null && (
-                <span className="rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium backdrop-blur">
+                <span className="rounded-full border border-white/30 bg-black/35 px-3.5 py-1.5 text-xs font-medium backdrop-blur">
                   Budget · {formatCurrency(trip.totalBudget, trip.currency)}
                 </span>
               )
@@ -173,7 +173,7 @@ export function TripHeader({
               {trip.title}
             </h1>
             <div
-              className={`flex flex-wrap items-center text-sm text-white/90 sm:mt-4 sm:gap-x-5 sm:gap-y-2 ${layout(
+              className={`flex flex-wrap items-center text-sm text-white sm:mt-4 sm:gap-x-5 sm:gap-y-2 ${layout(
                 "mt-2 gap-x-4 gap-y-1",
                 "mt-4 gap-x-5 gap-y-2",
               )}`}
@@ -221,7 +221,7 @@ export function TripHeader({
           >
             {scheduled ? (
               <>
-                <p className="mb-2 text-right text-xs font-medium text-white/85">
+                <p className="mb-2 text-right text-xs font-medium text-white">
                   Trip {plannedPct}% planned
                 </p>
                 <div className="h-1.5 overflow-hidden rounded-full bg-white/25">
@@ -233,7 +233,7 @@ export function TripHeader({
               </>
             ) : (
               respondedCount !== null && (
-                <p className="text-right text-xs font-medium text-white/85">
+                <p className="text-right text-xs font-medium text-white">
                   {respondedCount} of {trip.memberCount} marked availability
                 </p>
               )
