@@ -100,7 +100,7 @@ export function PackingList({
                     <span
                       className={`flex-1 text-sm ${
                         item.packed
-                          ? "text-stone-400 line-through decoration-stone-300"
+                          ? "text-stone-500 line-through decoration-stone-400"
                           : "text-ink"
                       }`}
                     >
@@ -130,7 +130,7 @@ export function PackingList({
                           ))}
                         </select>
                       ) : (
-                        <span className="text-xs text-stone-400">
+                        <span className="text-xs text-stone-500">
                           {item.assignee?.name ?? "—"}
                         </span>
                       ))}
@@ -142,7 +142,7 @@ export function PackingList({
                           onClick={() => run(() => deletePackingItem(item.id))}
                           disabled={pending}
                           aria-label={`Delete ${item.name}`}
-                          className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          className="rounded-full p-1.5 text-stone-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                         >
                           <Trash2 size={15} />
                         </button>

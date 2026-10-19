@@ -80,7 +80,7 @@ export default async function TripPreferencesPage({
             )}
             <Link
               href={`/onboarding?next=/trips/${trip.id}/preferences`}
-              className="rounded-full px-3 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
+              className="rounded-full px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:text-ink"
             >
               Travel profile
             </Link>

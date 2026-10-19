@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, List } from "lucide-react";
 
@@ -20,6 +20,7 @@ import {
 } from "@/lib/preference-questions";
 import { OptionTile } from "@/components/preferences/OptionTile";
 import { ProgressDots } from "@/components/preferences/ProgressDots";
+import { FormError } from "@/components/ui/form";
 import type {
   InterestTag,
   PreferenceAnswers,
@@ -117,6 +118,25 @@ export function PreferenceDeck({
     }
   }, [restored, draftKey, step, answers]);
 
+  /*
+   * Every step change the member makes moves focus to the new step's
+   * heading. Without it, the control they used (a tile, Back, Continue)
+   * either unmounts and drops focus on <body>, or survives and silently
+   * becomes a different question's control. The restore above doesn't set
+   * the flag, so loading the page never steals focus.
+   */
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const focusHeading = useRef(false);
+  function showStep(next: number | ((current: number) => number)) {
+    focusHeading.current = true;
+    setStep(next);
+  }
+  useEffect(() => {
+    if (!focusHeading.current) return;
+    focusHeading.current = false;
+    headingRef.current?.focus();
+  }, [step]);
+
   const question = questions[step];
   const onReview = step === questions.length;
 
@@ -132,7 +152,7 @@ export function PreferenceDeck({
   }
 
   function advance() {
-    setStep((s) => Math.min(s + 1, questions.length));
+    showStep((s) => Math.min(s + 1, questions.length));
   }
 
   /**
@@ -182,21 +202,22 @@ export function PreferenceDeck({
 
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col">
-      {/* Both banks fit on one line at 375px today (9 dots at most), but the
-          row is a question count away from not doing — so it wraps. */}
+      {/* With 24px dot targets, a full bank (9 dots) and the two links don't
+          share one line at 375px — so the row wraps rather than squeezing
+          the targets back down. */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <ProgressDots
           labels={stepLabels}
           current={step}
           answered={stepAnswered}
-          onJump={setStep}
+          onJump={showStep}
         />
         <div className="flex items-center gap-4">
           {!onReview && (
             <button
               type="button"
-              onClick={() => setStep(questions.length)}
-              className="flex items-center gap-1 text-xs font-medium text-stone-500 transition-colors hover:text-ink"
+              onClick={() => showStep(questions.length)}
+              className="flex items-center gap-1 text-xs font-medium text-stone-600 transition-colors hover:text-ink"
             >
               <List size={13} />
               See all answers
@@ -205,7 +226,7 @@ export function PreferenceDeck({
           <button
             type="button"
             onClick={leave}
-            className="text-xs font-medium text-stone-500 transition-colors hover:text-ink"
+            className="text-xs font-medium text-stone-600 transition-colors hover:text-ink"
           >
             {mode === "profile" ? "Skip for now" : "Finish later"}
           </button>
@@ -217,12 +238,17 @@ export function PreferenceDeck({
           <ReviewStep
             questions={questions}
             answers={answers}
-            onJumpTo={setStep}
+            onJumpTo={showStep}
             returning={answeredBefore}
+            headingRef={headingRef}
           />
         ) : (
           <QuestionStep
+            // A fresh instance per question, so the radio group's roving
+            // focus never carries over from the previous question.
+            key={question.id}
             question={question}
+            headingRef={headingRef}
             answer={answers[question.id]}
             /* Show the "same as usual" badge only while the answer still
                matches what the profile supplied. */
@@ -245,18 +271,14 @@ export function PreferenceDeck({
         )}
       </div>
 
-      {error && (
-        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      <FormError message={error} className="mt-4" />
 
       <div className="mt-8 flex items-center justify-between gap-3 pb-4">
         <button
           type="button"
-          onClick={() => setStep((s) => Math.max(s - 1, 0))}
+          onClick={() => showStep((s) => Math.max(s - 1, 0))}
           disabled={step === 0}
-          className="flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink disabled:invisible"
+          className="flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:text-ink disabled:invisible"
         >
           <ArrowLeft size={15} />
           Back
@@ -284,7 +306,7 @@ export function PreferenceDeck({
           <button
             type="button"
             onClick={skip}
-            className="rounded-full px-4 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
+            className="rounded-full px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:text-ink"
           >
             Skip this one
           </button>
@@ -295,7 +317,7 @@ export function PreferenceDeck({
         <button
           type="button"
           onClick={skip}
-          className="pb-4 text-center text-xs font-medium text-stone-400 transition-colors hover:text-ink"
+          className="pb-4 text-center text-xs font-medium text-stone-600 transition-colors hover:text-ink"
         >
           Skip this one
         </button>
@@ -341,6 +363,7 @@ function QuestionStep({
   question,
   answer,
   inherited,
+  headingRef,
   onSingle,
   onMulti,
   onText,
@@ -349,17 +372,61 @@ function QuestionStep({
   answer: string | string[] | undefined;
   /** True while this answer is still the member's usual one, carried over. */
   inherited: boolean;
+  headingRef: React.Ref<HTMLHeadingElement>;
   onSingle: (value: string) => void;
   onMulti: (value: string[]) => void;
   onText: (value: string) => void;
 }) {
   const picked = Array.isArray(answer) ? answer : [];
+  const options = question.options ?? [];
+  const headingId = useId();
+  const hintId = useId();
+  const describedBy = question.hint ? hintId : undefined;
+
+  /*
+   * Single-choice tiles are a radio group with a roving tabindex: one Tab
+   * stop, arrows move between tiles. Arrows move focus only — picking a tile
+   * auto-advances the deck, so selection can't follow focus the way native
+   * radios do; Space or Enter picks the focused tile.
+   */
+  const [focusIndex, setFocusIndex] = useState(() =>
+    Math.max(
+      options.findIndex((option) => option.value === answer),
+      0,
+    ),
+  );
+
+  function moveRadioFocus(event: React.KeyboardEvent<HTMLDivElement>) {
+    const radios = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'),
+    );
+    const index = radios.indexOf(event.target as HTMLElement);
+    if (index === -1) return;
+    const target = {
+      ArrowRight: index + 1,
+      ArrowDown: index + 1,
+      ArrowLeft: index - 1,
+      ArrowUp: index - 1,
+      Home: 0,
+      End: radios.length - 1,
+    }[event.key];
+    if (target === undefined) return;
+    event.preventDefault();
+    radios[(target + radios.length) % radios.length].focus();
+  }
 
   return (
     <div>
-      <h1 className="font-display text-3xl leading-tight">{question.prompt}</h1>
+      <h1
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-display text-3xl leading-tight outline-none"
+      >
+        {question.prompt}
+      </h1>
       {question.hint && (
-        <p className="mt-2 text-sm leading-relaxed text-stone-500">
+        <p id={hintId} className="mt-2 text-sm leading-relaxed text-stone-600">
           {question.hint}
         </p>
       )}
@@ -381,36 +448,54 @@ function QuestionStep({
             placeholder={question.placeholder}
             value={typeof answer === "string" ? answer : ""}
             onChange={(e) => onText(e.target.value)}
+            aria-labelledby={headingId}
+            aria-describedby={describedBy}
             className={inputClass}
           />
-        ) : (
+        ) : question.kind === "multi-select" ? (
           <div
             role="group"
-            aria-label={question.prompt}
+            aria-labelledby={headingId}
+            aria-describedby={describedBy}
             className="grid grid-cols-2 gap-3"
           >
-            {question.options?.map((option) => (
+            {options.map((option) => (
               <OptionTile
                 key={option.value}
+                role="checkbox"
                 emoji={option.emoji}
                 label={option.label}
                 description={option.description}
-                selected={
-                  question.kind === "multi-select"
-                    ? picked.includes(option.value)
-                    : answer === option.value
+                checked={picked.includes(option.value)}
+                onClick={() =>
+                  onMulti(
+                    picked.includes(option.value)
+                      ? picked.filter((v) => v !== option.value)
+                      : [...picked, option.value],
+                  )
                 }
-                onClick={() => {
-                  if (question.kind === "multi-select") {
-                    onMulti(
-                      picked.includes(option.value)
-                        ? picked.filter((v) => v !== option.value)
-                        : [...picked, option.value],
-                    );
-                  } else {
-                    onSingle(option.value);
-                  }
-                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div
+            role="radiogroup"
+            aria-labelledby={headingId}
+            aria-describedby={describedBy}
+            onKeyDown={moveRadioFocus}
+            className="grid grid-cols-2 gap-3"
+          >
+            {options.map((option, index) => (
+              <OptionTile
+                key={option.value}
+                role="radio"
+                emoji={option.emoji}
+                label={option.label}
+                description={option.description}
+                checked={answer === option.value}
+                tabIndex={index === focusIndex ? 0 : -1}
+                onFocus={() => setFocusIndex(index)}
+                onClick={() => onSingle(option.value)}
               />
             ))}
           </div>
@@ -429,12 +514,14 @@ function ReviewStep({
   answers,
   onJumpTo,
   returning,
+  headingRef,
 }: {
   questions: readonly PreferenceQuestion[];
   answers: PreferenceAnswers;
   onJumpTo: (step: number) => void;
   /** True when the member already had answers before this run. */
   returning: boolean;
+  headingRef: React.Ref<HTMLHeadingElement>;
 }) {
   const answered = questions.filter((q) => hasAnswer(answers[q.id]));
   // Reachable at any point now, not just by walking to the end — so the copy
@@ -443,10 +530,14 @@ function ReviewStep({
 
   return (
     <div>
-      <h1 className="font-display text-3xl leading-tight">
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-display text-3xl leading-tight outline-none"
+      >
         {complete && !returning ? "That's everything." : "Your answers"}
       </h1>
-      <p className="mt-2 text-sm leading-relaxed text-stone-500">
+      <p className="mt-2 text-sm leading-relaxed text-stone-600">
         {complete
           ? "Tap anything to change it."
           : `${answered.length} of ${questions.length} answered. Tap any question to fill it in or change it — blanks stay blank.`}
@@ -467,7 +558,7 @@ function ReviewStep({
                 className={`shrink-0 text-sm font-medium ${
                   hasAnswer(answers[question.id])
                     ? "text-ink"
-                    : "text-stone-400"
+                    : "text-stone-500"
                 }`}
               >
                 {summarize(question, answers[question.id])}
@@ -568,4 +659,4 @@ function prefillFor(
 }
 
 const inputClass =
-  "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine";
+  "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30";

@@ -121,7 +121,11 @@ export function IdeaCard({
         </button>
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-red-600">
+          {error}
+        </p>
+      )}
 
       <div className="mt-3 flex items-center justify-between gap-4">
         {idea.votes.length > 0 ? (
@@ -140,7 +144,7 @@ export function IdeaCard({
             )}
           </div>
         ) : (
-          <span className="text-xs text-stone-400">No votes yet</span>
+          <span className="text-xs text-stone-500">No votes yet</span>
         )}
 
         {canEdit && (
@@ -149,7 +153,7 @@ export function IdeaCard({
               type="button"
               onClick={() => setEditOpen(true)}
               aria-label="Edit idea"
-              className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-ink"
+              className="rounded-full p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-ink"
             >
               <Pencil size={15} />
             </button>

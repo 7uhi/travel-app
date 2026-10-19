@@ -68,7 +68,7 @@ export function ExpenseList({
             <h3 className="text-sm font-medium text-stone-600">
               {formatDayDate(`${day}T00:00:00.000Z`)}
             </h3>
-            <p className="text-xs tabular-nums text-stone-500">
+            <p className="text-xs tabular-nums text-stone-600">
               {formatCents(
                 dayExpenses.reduce((s, e) => s + e.amountCents, 0),
                 currency,

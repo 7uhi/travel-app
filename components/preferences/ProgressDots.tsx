@@ -1,14 +1,18 @@
 /**
  * Deck progress, and the deck's random-access navigation: every dot is a
- * button that jumps straight to its question, labelled with the question it
- * belongs to so hovering tells you where you'd land.
+ * button that jumps straight to its question, named with its position and the
+ * question it belongs to so hovering or a screen reader tells you where you'd
+ * land.
  *
  * Fill tracks whether a step has an answer rather than whether you've walked
  * past it — once you can jump around, "earlier" stops implying "answered",
  * and what someone scanning the dots wants to find is the gaps.
  *
- * The dot stays 6px tall; the button around it carries the padding, so the
- * tap target clears 24px without changing how the row looks.
+ * The dot stays 6px tall; the button around it is a 24×24px target (WCAG 2.2
+ * target size), so the dots look the same and only their spacing grows. The
+ * row keeps the full 24px height rather than cancelling it with negative
+ * margin: once it wraps on a phone, the targets would otherwise overlap the
+ * line above.
  */
 export function ProgressDots({
   labels,
@@ -23,16 +27,13 @@ export function ProgressDots({
   answered: readonly boolean[];
   onJump: (index: number) => void;
 }) {
+  const questionCount = labels.length - 1;
+
   return (
-    <nav
-      aria-label="Deck progress"
-      /* -my-2 cancels the buttons' tap-target padding, so the row occupies the
-         same vertical space it did as plain dots. */
-      className="-my-2 flex items-center"
-    >
+    <nav aria-label="Deck progress" className="flex items-center">
       {labels.map((label, index) => {
         const isCurrent = index === current;
-        const isReview = index === labels.length - 1;
+        const isReview = index === questionCount;
 
         return (
           <button
@@ -44,9 +45,9 @@ export function ProgressDots({
             aria-label={
               isReview
                 ? label
-                : `${label} — ${answered[index] ? "answered" : "not answered yet"}`
+                : `Question ${index + 1} of ${questionCount}: ${label} — ${answered[index] ? "answered" : "not answered yet"}`
             }
-            className="group px-[3px] py-2"
+            className="group flex h-6 min-w-6 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-pine"
           >
             <span
               className={`block h-1.5 rounded-full transition-all ${

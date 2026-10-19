@@ -12,6 +12,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui/form";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 /**
  * Edits a trip's title and destination, including putting the destination
@@ -100,24 +101,15 @@ export function EditTripDialog({
         </Field>
 
         {!settingDestination && (
-          <div
-            role="radiogroup"
-            aria-label="Do you know where you're going?"
-            className="grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1"
-          >
-            <PlaceOption
-              active={place === "known"}
-              onClick={() => setPlace("known")}
-            >
-              I know where
-            </PlaceOption>
-            <PlaceOption
-              active={place === "undecided"}
-              onClick={() => setPlace("undecided")}
-            >
-              Not decided yet
-            </PlaceOption>
-          </div>
+          <SegmentedControl
+            legend="Do you know where you're going?"
+            options={[
+              ["known", "I know where"],
+              ["undecided", "Not decided yet"],
+            ]}
+            value={place}
+            onChange={setPlace}
+          />
         )}
 
         {settingDestination ? null : place === "known" ? (
@@ -142,29 +134,5 @@ export function EditTripDialog({
         </div>
       </form>
     </Dialog>
-  );
-}
-
-function PlaceOption({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? "bg-white text-ink shadow-sm" : "text-stone-600 hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

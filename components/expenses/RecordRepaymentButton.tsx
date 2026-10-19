@@ -177,7 +177,7 @@ export function RecordRepaymentButton({
           </Field>
 
           {!wholeUnits && (
-            <p className="text-sm text-red-700">
+            <p role="alert" className="text-sm text-red-700">
               {currency} has no decimal places — enter a whole number.
             </p>
           )}

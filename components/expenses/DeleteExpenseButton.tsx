@@ -30,7 +30,7 @@ export function DeleteExpenseButton({ expenseId }: { expenseId: string }) {
       onClick={handleDelete}
       disabled={pending}
       aria-label="Delete expense"
-      className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+      className="rounded-full p-1.5 text-stone-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
     >
       <Trash2 size={15} />
     </button>

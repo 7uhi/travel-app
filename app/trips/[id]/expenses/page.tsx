@@ -66,7 +66,10 @@ export default async function TripExpensesPage({
       <TripHeader trip={trip} activeTab="expenses" />
 
       <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        {/* min-w-0 on both columns: a grid item is otherwise as wide as its
+            longest unbreakable line — a truncated expense title or name —
+            which pushed the page sideways on phones. */}
+        <div className="min-w-0 lg:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-2xl">Expenses</h2>
             <div className="flex flex-wrap items-center gap-3">
@@ -97,7 +100,7 @@ export default async function TripExpensesPage({
           />
         </div>
 
-        <aside className="lg:sticky lg:top-8">
+        <aside className="min-w-0 lg:sticky lg:top-8">
           <BalancesPanel
             tripId={trip.id}
             balances={balancesRes.data}

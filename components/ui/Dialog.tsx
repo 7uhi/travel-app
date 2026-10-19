@@ -7,6 +7,7 @@ const WIDTHS = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-xl",
 } as const;
 
 /**
@@ -18,6 +19,10 @@ const WIDTHS = {
  * Focus starts on an element marked data-autofocus, else the first form
  * field. onClose is the only way out: a parent that's mid-save can ignore it
  * to keep the dialog open.
+ *
+ * Tab and Shift+Tab are left to the browser: past the last control, focus
+ * moves to the browser's own UI and then back into the dialog, never to the
+ * inert page behind it.
  */
 export function Dialog({
   open,
@@ -38,6 +43,10 @@ export function Dialog({
   const pressStartedOnBackdrop = useRef(false);
   const titleId = useId();
   const descriptionId = useId();
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     const dialog = ref.current;
@@ -47,14 +56,37 @@ export function Dialog({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    dialog.showModal();
-    dialog
-      .querySelector<HTMLElement>(
-        "[data-autofocus], input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])",
-      )
-      ?.focus();
+    const show = () => {
+      dialog.showModal();
+      // Two lookups, not one selector list: querySelector returns the first
+      // match in document order, so a field above the marked one would win.
+      (
+        dialog.querySelector<HTMLElement>("[data-autofocus]") ??
+        dialog.querySelector<HTMLElement>(
+          "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])",
+        )
+      )?.focus();
+    };
+    show();
+
+    /*
+     * Chrome's close-watcher abuse guard makes a repeated Escape (with no
+     * click or typing in between) close the modal without a cancelable
+     * cancel event, so onCancel can't veto it. Any close we didn't start is
+     * undone and routed through onClose instead, so a parent that's mid-save
+     * still gets to keep the dialog open. The close event is queued, so one
+     * that arrives after the dialog was shown again (Strict Mode's mount,
+     * cleanup, mount) is stale and ignored.
+     */
+    const onNativeClose = () => {
+      if (!dialog.isConnected || dialog.open) return;
+      show();
+      onCloseRef.current();
+    };
+    dialog.addEventListener("close", onNativeClose);
 
     return () => {
+      dialog.removeEventListener("close", onNativeClose);
       dialog.close();
       if (opener?.isConnected) opener.focus();
     };

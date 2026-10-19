@@ -35,7 +35,7 @@ export function EditExpenseButton({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Edit expense"
-        className="rounded-full p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-ink"
+        className="rounded-full p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-ink"
       >
         <Pencil size={15} />
       </button>

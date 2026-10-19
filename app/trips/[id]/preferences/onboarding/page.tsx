@@ -37,7 +37,7 @@ export default async function PreferenceOnboardingPage({
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-600">
         {trip.title}
       </p>
       <PreferenceDeck

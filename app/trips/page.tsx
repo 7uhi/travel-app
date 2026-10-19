@@ -8,7 +8,10 @@ import { getMyTrips } from "@/actions/trip";
 import { PROFILE_ONBOARDING_SEEN } from "@/lib/onboarding";
 import { NewTripButton } from "@/components/NewTripButton";
 import { TravelProfileCard } from "@/components/preferences/TravelProfileCard";
-import { UnarchiveTripButton } from "@/components/trip/UnarchiveTripButton";
+import {
+  ArchivedTrips,
+  UnarchiveTripButton,
+} from "@/components/trip/UnarchiveTripButton";
 import { formatDateRange } from "@/lib/format";
 import { tripStatus, type TripStatus } from "@/lib/trip-status";
 import type { MyTripSummary } from "@/types";
@@ -45,7 +48,7 @@ export default async function TripsPage() {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
         <h1 className="font-display text-3xl">Something went wrong</h1>
-        <p className="mt-3 text-sm text-stone-500">{result.error}</p>
+        <p className="mt-3 text-sm text-stone-600">{result.error}</p>
       </main>
     );
   }
@@ -68,13 +71,13 @@ export default async function TripsPage() {
       {trips.length === 0 && archived.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-12 text-center">
           <p className="font-display text-2xl">No trips yet</p>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-stone-500">
+          <p className="mx-auto mt-2 max-w-sm text-sm text-stone-600">
             Create your first trip and Roam will lay out a day-by-day itinerary
             you can share with friends.
           </p>
         </div>
       ) : trips.length === 0 ? (
-        <p className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-8 text-center text-sm text-stone-500">
+        <p className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-8 text-center text-sm text-stone-600">
           Every trip is archived. Unarchive one below, or start a new trip.
         </p>
       ) : (
@@ -85,28 +88,30 @@ export default async function TripsPage() {
         </ul>
       )}
 
-      {archived.length > 0 && (
-        <details className="group mt-10">
-          <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full px-1 py-1 text-sm font-medium text-stone-600 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
-            <Archive size={15} aria-hidden />
-            Archived ({archived.length})
-            <ChevronDown
-              size={15}
-              aria-hidden
-              className="transition-transform group-open:rotate-180"
-            />
-          </summary>
-          <p className="mt-2 text-xs text-stone-500">
-            Hidden from your list only — everyone else still sees these trips,
-            and you can still open them.
-          </p>
-          <ul className="mt-3 divide-y divide-stone-100 overflow-hidden rounded-2xl border border-stone-200/80 bg-white">
-            {archived.map((trip) => (
-              <ArchivedTripRow key={trip.id} trip={trip} />
-            ))}
-          </ul>
-        </details>
-      )}
+      <ArchivedTrips>
+        {archived.length > 0 && (
+          <details className="group mt-10">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full px-1 py-1 text-sm font-medium text-stone-600 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+              <Archive size={15} aria-hidden />
+              Archived ({archived.length})
+              <ChevronDown
+                size={15}
+                aria-hidden
+                className="transition-transform group-open:rotate-180"
+              />
+            </summary>
+            <p className="mt-2 text-xs text-stone-600">
+              Hidden from your list only — everyone else still sees these trips,
+              and you can still open them.
+            </p>
+            <ul className="mt-3 divide-y divide-stone-100 overflow-hidden rounded-2xl border border-stone-200/80 bg-white">
+              {archived.map((trip) => (
+                <ArchivedTripRow key={trip.id} trip={trip} />
+              ))}
+            </ul>
+          </details>
+        )}
+      </ArchivedTrips>
     </main>
   );
 }
@@ -137,6 +142,7 @@ function TripCard({ trip }: { trip: MyTripSummary }) {
   return (
     <li>
       <Link
+        id={`trip-card-${trip.id}`}
         href={`/trips/${trip.id}`}
         className="block overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04)] transition-shadow hover:shadow-md"
       >

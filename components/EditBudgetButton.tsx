@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 import { updateTripBudget } from "@/actions/trip";
+import { Dialog } from "@/components/ui/Dialog";
+import {
+  Field,
+  FormError,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/components/ui/form";
 import {
   amountInputProps,
   isWholeUnit,
@@ -34,6 +42,7 @@ export function EditBudgetButton({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const hintId = useId();
 
   function close() {
     if (pending) return;
@@ -79,7 +88,7 @@ export function EditBudgetButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-white/25"
+        className="flex items-center gap-1.5 rounded-full border border-white/30 bg-black/35 px-3.5 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-black/45"
       >
         <Pencil size={12} />
         {totalBudget !== null
@@ -87,86 +96,47 @@ export function EditBudgetButton({
           : "Set budget"}
       </button>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-          onClick={close}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Trip budget"
-            className="w-full max-w-sm rounded-2xl bg-white p-6 text-ink shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="font-display text-2xl">Trip budget</h2>
+      <Dialog open={open} onClose={close} title="Trip budget" size="sm">
+        <form onSubmit={submit} className="space-y-4">
+          <Field label={`Budget in ${currency} — whole trip`}>
+            <input
+              {...amountInputProps(currency)}
+              min="0"
+              placeholder={isZeroDecimal(currency) ? "2000" : "2000.00"}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              aria-describedby={hintId}
+              className={inputClass}
+              data-autofocus
+            />
+          </Field>
+          <p id={hintId} className="text-xs text-stone-600">
+            Compared against the planned cost of itinerary activities. Leave
+            empty to remove the budget.
+          </p>
+
+          <FormError message={error} />
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            {totalBudget !== null && (
               <button
                 type="button"
-                onClick={close}
-                aria-label="Close"
-                className="rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-ink"
+                onClick={() => save(null)}
+                disabled={pending}
+                className="mr-auto rounded-full px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
               >
-                <X size={18} />
+                Remove budget
               </button>
-            </div>
-
-            <form onSubmit={submit} className="space-y-4">
-              <label className="block">
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
-                  Budget in {currency} — whole trip
-                </span>
-                <input
-                  {...amountInputProps(currency)}
-                  min="0"
-                  placeholder={isZeroDecimal(currency) ? "2000" : "2000.00"}
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  autoFocus
-                  className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine"
-                />
-              </label>
-              <p className="text-xs text-stone-500">
-                Compared against the planned cost of itinerary activities.
-                Leave empty to remove the budget.
-              </p>
-
-              {error && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
-                </p>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-1">
-                {totalBudget !== null && (
-                  <button
-                    type="button"
-                    onClick={() => save(null)}
-                    disabled={pending}
-                    className="mr-auto rounded-full px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
-                  >
-                    Remove budget
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={close}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-ink"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="rounded-full bg-pine px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-dark disabled:opacity-60"
-                >
-                  {pending ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
+            )}
+            <button type="button" onClick={close} className={secondaryButtonClass}>
+              Cancel
+            </button>
+            <button type="submit" disabled={pending} className={primaryButtonClass}>
+              {pending ? "Saving…" : "Save"}
+            </button>
           </div>
-        </div>
-      )}
+        </form>
+      </Dialog>
     </>
   );
 }

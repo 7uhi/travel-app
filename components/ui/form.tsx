@@ -29,11 +29,25 @@ export function Field({
   );
 }
 
-/** An error that assistive technology announces as soon as it appears. */
-export function FormError({ message }: { message: string | null }) {
+/**
+ * An error that assistive technology announces as soon as it appears: an
+ * inserted role="alert" is read out, so it renders nothing until there's a
+ * message rather than sitting on the page as an empty alert. `className` is
+ * for spacing outside a `space-y` form.
+ */
+export function FormError({
+  message,
+  className = "",
+}: {
+  message: string | null;
+  className?: string;
+}) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p
+      role="alert"
+      className={`rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ${className}`}
+    >
       {message}
     </p>
   );

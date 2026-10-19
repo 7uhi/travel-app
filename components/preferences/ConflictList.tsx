@@ -38,7 +38,7 @@ export function ConflictList({
               <p className="text-sm font-medium text-ink">
                 {title(conflict)}
               </p>
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-stone-600">
                 {conflict.summary} —{" "}
                 {sideNames(conflict.forUserIds, names)} vs{" "}
                 {sideNames(conflict.againstUserIds, names)}
