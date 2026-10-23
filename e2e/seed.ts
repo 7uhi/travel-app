@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../generated/prisma/client";
 
 export const USERS = {
   owner: { id: "e2e-owner", name: "Olivia Owner", email: "owner@e2e.test" },

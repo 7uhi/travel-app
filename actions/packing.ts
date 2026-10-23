@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma, type PackingItem as DbPackingItem } from "@prisma/client";
+import { Prisma, type PackingItem as DbPackingItem } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";

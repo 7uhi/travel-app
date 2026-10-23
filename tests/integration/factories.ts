@@ -1,4 +1,4 @@
-import type { ExpenseCategory, TripRole } from "@prisma/client";
+import type { ExpenseCategory, TripRole } from "../../generated/prisma/client";
 
 import { prisma } from "@/lib/prisma";
 

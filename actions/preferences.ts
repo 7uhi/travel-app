@@ -6,7 +6,7 @@ import {
   type TravelProfile as DbTravelProfile,
   type TripInterest as DbTripInterest,
   type TripPreference as DbTripPreference,
-} from "@prisma/client";
+} from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 

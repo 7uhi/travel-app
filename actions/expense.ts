@@ -5,7 +5,7 @@ import type {
   ExpenseSplit as DbExpenseSplit,
   Prisma,
   User as DbUser,
-} from "@prisma/client";
+} from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";
