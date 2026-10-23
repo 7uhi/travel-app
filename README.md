@@ -4,7 +4,7 @@ A collaborative trip-planning app: shared trips with day-by-day itineraries,
 availability polls to pick trip dates together, invite links, and
 Splitwise-style group expense splitting.
 
-Built with Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4,
+Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4,
 Prisma 7 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
 
 ## Getting started
