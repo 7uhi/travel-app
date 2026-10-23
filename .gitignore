@@ -22,3 +22,6 @@ myenv/
 
 # misc
 .DS_Store
+
+# generated Prisma client (created by postinstall)
+/generated/prisma/

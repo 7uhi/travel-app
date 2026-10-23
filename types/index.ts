@@ -7,7 +7,7 @@
  * numbers before serialization (e.g. `trip.totalBudget?.toNumber()`).
  *
  * Server-side code (route handlers, server actions, data-access layers)
- * should prefer Prisma's generated types from `@prisma/client` instead.
+ * should prefer Prisma's generated types from `../generated/prisma/client` instead.
  */
 
 export interface User {

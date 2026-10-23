@@ -1,5 +1,6 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { test as base } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 
 import { DATABASE_URL, authStatePath } from "./env";
 import type { SeededUser } from "./seed";
@@ -25,7 +26,9 @@ export const test = base.extend<
   },
   db: [
     async ({}, use) => {
-      const db = new PrismaClient({ datasourceUrl: DATABASE_URL });
+      const db = new PrismaClient({
+        adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+      });
       await use(db);
       await db.$disconnect();
     },

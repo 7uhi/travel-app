@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma, type ActivityIdea as DbActivityIdea } from "@prisma/client";
+import { Prisma, type ActivityIdea as DbActivityIdea } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { fail, type ActionResult } from "@/lib/action-result";

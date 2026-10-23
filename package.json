@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
+    "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.9",
     "lucide-react": "^1.60.0",
     "next": "^15.5.28",
     "next-auth": "^5.0.0-beta.32",
@@ -35,5 +37,9 @@
   },
   "overrides": {
     "postcss": "^8.5.31"
+  },
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
   }
 }

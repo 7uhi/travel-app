@@ -5,13 +5,13 @@ availability polls to pick trip dates together, invite links, and
 Splitwise-style group expense splitting.
 
 Built with Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4,
-Prisma 6 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
+Prisma 7 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
 
 ## Getting started
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.12+ (Node 22 LTS recommended)
 - PostgreSQL running locally (e.g. `brew install postgresql@14 && brew services start postgresql@14`)
 - Google OAuth credentials (for sign-in)
 
@@ -95,6 +95,8 @@ Actions in `actions/`, and the only API route is the Auth.js handler.
 ```
 auth.ts / auth.config.ts / middleware.ts   Auth wiring (see below)
 prisma/schema.prisma                       Data model + migrations
+prisma.config.ts                           CLI datasource + migration configuration
+generated/prisma/                          Generated client (gitignored)
 actions/                                   Server actions — the "backend"
   trip.ts        trips, days, activities, trip header, edit/reschedule/delete/hide
   members.ts     member list, leaving, removal, roles, ownership transfer
@@ -252,10 +254,16 @@ removed.
 
 `npm run typecheck` runs the TypeScript compiler. CI also runs
 `npm audit --omit=dev --audit-level=critical`, so a critical advisory in a
-production dependency fails the build. The level is `critical` rather than
-`high` on purpose: the remaining high advisories are in Prisma 6's own
-tooling (`prisma` → `@prisma/config` → `deepmerge-ts`), only fixable by the
-Prisma 7 upgrade, and accepted until then.
+production dependency fails the build. The Prisma 7 upgrade also resolves the
+previous high advisories in Prisma 6's CLI tooling (`prisma` → `@prisma/config` → `deepmerge-ts`).
+
+Prisma 7 uses `prisma.config.ts` for the CLI database URL and loads `.env`
+explicitly with `dotenv`. The schema generates the client into
+`generated/prisma/`; `npm ci` regenerates it. The application and test clients
+use `@prisma/adapter-pg` with `DATABASE_URL`. Production migrations still use
+`DIRECT_DATABASE_URL` through `vercel-build.sh`. Generation and preview builds
+work without a database URL; migrations and runtime queries need one.
+See the [official Prisma 7 migration guide](https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7).
 
 The integration and e2e suites **wipe every table**, so they need a
 disposable database. They read `DATABASE_URL` (default

@@ -1,13 +1,13 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import type {
   Activity as DbActivity,
   Trip as DbTrip,
   TripDay as DbTripDay,
   TripMember as DbTripMember,
   User as DbUser,
-} from "@prisma/client";
+} from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
