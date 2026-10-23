@@ -51,6 +51,42 @@ Prisma 6 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
    Google credentials, visit <http://localhost:3000/preview> for a static
    demo dashboard.
 
+### Deploying to Vercel
+
+1. **Database.** Create a hosted Postgres database (Neon, Supabase, or a
+   Postgres integration from the Vercel Marketplace) and copy two connection
+   strings: the pooled one for the app, since serverless functions open many
+   short-lived connections, and the direct one for migrations.
+
+2. **Project.** Import the repository in Vercel; it detects Next.js. Add
+   these environment variables to the Production environment:
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | The pooled connection string |
+   | `DIRECT_DATABASE_URL` | The direct (non-pooled) connection string |
+   | `AUTH_SECRET` | A new secret from `npx auth secret`; don't reuse your local one |
+   | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | The Google OAuth client (next step) |
+
+   Under Settings → Functions, pick the region closest to the database: each
+   trip page makes several queries per load.
+
+3. **Google sign-in.** Add `https://<your-domain>/api/auth/callback/google`
+   to the OAuth client's authorized redirect URIs. While the OAuth consent
+   screen's publishing status is *Testing*, only the test users listed there
+   can sign in; switch it to *In production* to let anyone in.
+
+4. **Deploy.** `vercel.json` runs `vercel-build.sh` as the build command.
+   On production deployments it applies pending migrations with
+   `prisma migrate deploy` over `DIRECT_DATABASE_URL` before `next build`,
+   and fails the build if that variable is missing. Preview deployments only
+   build.
+
+Google accepts only redirect URIs that are listed exactly, so sign-in doesn't
+work on Vercel's per-deployment preview URLs, and previews build without any of
+these variables. Keep the database variables on Production only, so a preview
+can never write to the production database.
+
 ## How it works
 
 There is no REST API layer — all reads and mutations go through React Server
