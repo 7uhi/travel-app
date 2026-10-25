@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getIdeas } from "@/actions/activity-ideas";
+import { getTripAiSetting } from "@/actions/ai-settings";
 import { getTripDays, getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
@@ -31,6 +32,11 @@ export default async function TripIdeasPage({
 
   const trip = tripRes.data;
   const ideas = ideasRes.data;
+  const aiSetting = isAiSuggestionsEnabled()
+    ? await getTripAiSetting(id)
+    : null;
+  const aiEnabled =
+    aiSetting?.success === true && aiSetting.data.suggestionsEnabled;
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
   const canEdit = trip.role === "OWNER" || trip.role === "EDITOR";
@@ -47,10 +53,18 @@ export default async function TripIdeasPage({
           {canEdit && <AddIdeaButton tripId={trip.id} />}
         </div>
 
-        {isAiSuggestionsEnabled() && (
+        {aiEnabled ? (
           <div className="mb-4">
             <AiSuggestions tripId={trip.id} canApply={canEdit} />
           </div>
+        ) : (
+          isAiSuggestionsEnabled() &&
+          trip.role === "OWNER" && (
+            <p className="mb-4 rounded-xl bg-stone-50 p-3 text-xs text-stone-600">
+              AI suggestions are off for this trip. The owner can turn them
+              on from Preferences after reviewing what would be shared.
+            </p>
+          )
         )}
 
         {ideas.length === 0 ? (

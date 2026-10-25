@@ -32,9 +32,22 @@ export interface GenerateOptions {
   includeSensitiveNotes?: boolean;
 }
 
+/** Privacy-safe operational metadata: outcome, timing, attempts only. */
+export interface GenerateMeta {
+  attempts: number;
+  durationMs: number;
+  /** Provider output failed validation (subset of failures). */
+  validationFailed: boolean;
+}
+
 export type GenerateResult =
-  | { ok: true; suggestions: AiSuggestionWithConfidence[]; provider: string }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      suggestions: AiSuggestionWithConfidence[];
+      provider: string;
+      meta: GenerateMeta;
+    }
+  | { ok: false; error: string; meta: GenerateMeta };
 
 const DISABLED_ERROR = "AI suggestions are not enabled for this workspace.";
 const OVERLOADED_ERROR = "Suggestions are unavailable right now. Try again later.";
@@ -45,7 +58,15 @@ export async function generateActivitySuggestions(
   context: SuggestionContext,
   options: GenerateOptions = {},
 ): Promise<GenerateResult> {
-  if (!isAiSuggestionsEnabled()) return { ok: false, error: DISABLED_ERROR };
+  const startedAt = Date.now();
+  const meta = (attempts: number, validationFailed = false): GenerateMeta => ({
+    attempts,
+    durationMs: Date.now() - startedAt,
+    validationFailed,
+  });
+  if (!isAiSuggestionsEnabled()) {
+    return { ok: false, error: DISABLED_ERROR, meta: meta(0) };
+  }
 
   // Budgeted structurally before rendering/validation: an oversized history
   // is omitted section-wise (constraints preserved), and only an
@@ -54,9 +75,9 @@ export async function generateActivitySuggestions(
     ...context,
     includeSensitiveNotes: options.includeSensitiveNotes ?? false,
   });
-  if (!budgeted) return { ok: false, error: TOO_LARGE_ERROR };
+  if (!budgeted) return { ok: false, error: TOO_LARGE_ERROR, meta: meta(0) };
   const parsed = aiSuggestionRequestSchema.safeParse(budgeted);
-  if (!parsed.success) return { ok: false, error: OVERLOADED_ERROR };
+  if (!parsed.success) return { ok: false, error: OVERLOADED_ERROR, meta: meta(0) };
   const validated = parsed.data;
 
   // Duplicate filtering uses the originally loaded titles, never the
@@ -73,9 +94,20 @@ export async function generateActivitySuggestions(
   let attempt = 0;
   for (;;) {
     const outcome = await callOnce(provider, validated, takenTitles);
-    if (outcome.ok) return { ok: true, suggestions: outcome.suggestions, provider: provider.name };
+    if (outcome.ok) {
+      return {
+        ok: true,
+        suggestions: outcome.suggestions,
+        provider: provider.name,
+        meta: meta(attempt + 1),
+      };
+    }
     if (!isRetryable(outcome.error) || attempt >= maxRetries) {
-      return { ok: false, error: toUserMessage(outcome.error) };
+      return {
+        ok: false,
+        error: toUserMessage(outcome.error),
+        meta: meta(attempt + 1, outcome.error.kind === "bad_output"),
+      };
     }
     attempt += 1;
   }

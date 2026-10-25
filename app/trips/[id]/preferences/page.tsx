@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { getTripAiSetting } from "@/actions/ai-settings";
 import { getTripPreferences } from "@/actions/preferences";
 import { getTripHeader } from "@/actions/trip";
 import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
+import { AiSettingsPanel } from "@/components/preferences/AiSettingsPanel";
 import { ConflictList } from "@/components/preferences/ConflictList";
 import { GroupConsensusPanel } from "@/components/preferences/GroupConsensusPanel";
 import { MemberPreferenceCard } from "@/components/preferences/MemberPreferenceCard";
@@ -25,9 +27,10 @@ export default async function TripPreferencesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [tripRes, prefsRes] = await Promise.all([
+  const [tripRes, prefsRes, aiSettingRes] = await Promise.all([
     getTripHeader(id),
     getTripPreferences(id),
+    getTripAiSetting(id),
   ]);
 
   if (!tripRes.success) {
@@ -130,6 +133,9 @@ export default async function TripPreferencesPage({
               }
             />
             <ConflictList conflicts={conflicts} names={names} />
+            {aiSettingRes.success && (
+              <AiSettingsPanel tripId={trip.id} setting={aiSettingRes.data} />
+            )}
           </aside>
         </div>
       </section>

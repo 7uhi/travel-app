@@ -51,6 +51,16 @@ export function aiMaxRetries(): number {
   return readInt("AI_SUGGEST_MAX_RETRIES", 1, { min: 0, max: 2 });
 }
 
+/** Max generations per user per UTC day (RESERVED + COMPLETED count). */
+export function aiUserDailyLimit(): number {
+  return readInt("AI_SUGGEST_USER_DAILY_LIMIT", 20, { min: 1, max: 10_000 });
+}
+
+/** Max generations per trip per UTC day (RESERVED + COMPLETED count). */
+export function aiTripDailyLimit(): number {
+  return readInt("AI_SUGGEST_TRIP_DAILY_LIMIT", 50, { min: 1, max: 10_000 });
+}
+
 /**
  * Input budget: the maximum total length, in JS string characters (UTF-16
  * code units), of `systemPrompt + userContent` sent to the provider.

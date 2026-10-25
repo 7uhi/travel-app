@@ -5,6 +5,18 @@ import { suggestActivityIdeas } from "@/actions/ai-suggestions";
 import { prisma } from "@/lib/prisma";
 
 import { seedTripWithRoles } from "./factories";
+
+/** Enables per-trip AI suggestions as the owner would (consent recorded). */
+async function enableAi(tripId: string, ownerId: string) {
+  await prisma.tripAiSetting.create({
+    data: {
+      tripId,
+      suggestionsEnabled: true,
+      enabledById: ownerId,
+      enabledAt: new Date(),
+    },
+  });
+}
 import { actAs } from "./helpers";
 
 beforeEach(() => {
@@ -18,6 +30,7 @@ afterEach(() => {
 describe("suggestActivityIdeas", () => {
   it("generates mock suggestions for any trip member, including viewers", async () => {
     const seed = await seedTripWithRoles();
+    await enableAi(seed.trip.id, seed.owner.id);
     actAs(seed.viewer.id);
 
     const result = await suggestActivityIdeas(seed.trip.id);
@@ -75,8 +88,21 @@ describe("suggestActivityIdeas", () => {
     });
   });
 
+  it("refuses generation while the trip has not enabled suggestions", async () => {
+    const seed = await seedTripWithRoles();
+    actAs(seed.viewer.id);
+
+    expect(await suggestActivityIdeas(seed.trip.id)).toEqual({
+      success: false,
+      error:
+        "AI suggestions are turned off for this trip. The owner can turn them on from Preferences.",
+    });
+    expect(await prisma.aiGeneration.count()).toBe(0);
+  });
+
   it("applies a suggestion through the existing idea authorization", async () => {
     const seed = await seedTripWithRoles();
+    await enableAi(seed.trip.id, seed.owner.id);
     actAs(seed.viewer.id);
     const generated = await suggestActivityIdeas(seed.trip.id);
     expect(generated.success).toBe(true);

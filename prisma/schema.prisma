@@ -36,6 +36,7 @@ model User {
   activityVotes   ActivityVote[]
   travelProfile   TravelProfile?
   tripPreferences TripPreference[]
+  aiGenerations   AiGeneration[]
 }
 
 model Account {
@@ -111,6 +112,8 @@ model Trip {
   packingTemplates PackingTemplate[]
   ideas        ActivityIdea[]
   preferences  TripPreference[]
+  aiSetting    TripAiSetting?
+  aiGenerations AiGeneration[]
 }
 
 enum TripRole {
@@ -560,4 +563,61 @@ model TripInterest {
   tripPreference   TripPreference @relation(fields: [tripPreferenceId], references: [id], onDelete: Cascade)
 
   @@unique([tripPreferenceId, tag])
+}
+
+/* ------------------------------------------------------------------ */
+/* AI suggestions — per-trip consent + persistent usage accounting     */
+/* ------------------------------------------------------------------ */
+
+/// One per trip: the owner's explicit consent for AI suggestion generation
+/// on this trip. No row (or suggestionsEnabled = false) means the feature
+/// is off for the trip regardless of the global flag. Enabling records who
+/// confirmed the external-processing disclosure and when; dietary and
+/// accessibility notes are never part of what consent covers.
+model TripAiSetting {
+  tripId String @id
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  suggestionsEnabled Boolean   @default(false)
+  /// Who confirmed the disclosure; null while never enabled.
+  enabledById        String?
+  enabledAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum AiGenerationStatus {
+  RESERVED
+  COMPLETED
+  FAILED
+}
+
+/// One row per generation request: quota accounting and privacy-safe
+/// operational metadata. Never stores prompts, suggestions, notes, or any
+/// other content — only outcome, timing, and attempt counts.
+///
+/// Quota semantics: today's RESERVED + COMPLETED rows count against the
+/// per-user and per-trip daily limits; FAILED rows are recorded for
+/// operations but do not consume quota. Internal provider retries share
+/// the request's single reservation and are counted in `attempts`.
+model AiGeneration {
+  id        String             @id @default(cuid())
+  status    AiGenerationStatus @default(RESERVED)
+  provider  String
+  attempts  Int                @default(0)
+  durationMs Int?
+  /// Provider output failed schema validation (a subset of FAILED).
+  validationFailed Boolean @default(false)
+  createdAt DateTime  @default(now())
+  settledAt DateTime?
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+  @@index([userId, createdAt])
 }

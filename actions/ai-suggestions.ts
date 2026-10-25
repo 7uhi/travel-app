@@ -5,8 +5,17 @@ import { isAiSuggestionsEnabled } from "@/lib/ai/config";
 import { loadSuggestionContext } from "@/lib/ai/context";
 import { generateActivitySuggestions } from "@/lib/ai/generate";
 import { logSuggestionFailure } from "@/lib/ai/log";
+import { prisma } from "@/lib/prisma";
 import type { AiSuggestionWithConfidence } from "@/lib/ai/schemas";
+import {
+  completeAiGeneration,
+  failAiGeneration,
+  quotaMessage,
+  reserveAiGeneration,
+} from "@/lib/ai/usage";
 import { currentUserId } from "@/lib/session";
+
+const PROVIDER_NAME = "mock";
 
 /**
  * Generates activity-idea suggestions for a trip. Generation is read-only:
@@ -30,8 +39,40 @@ export async function suggestActivityIdeas(
     const context = await loadSuggestionContext(tripId, userId);
     if (!context) return fail("Trip not found.");
 
+    // Per-trip consent: the owner must have enabled suggestions for this
+    // trip (global flag alone is never enough once a provider is live).
+    const setting = await prisma.tripAiSetting.findUnique({
+      where: { tripId },
+      select: { suggestionsEnabled: true },
+    });
+    if (!setting?.suggestionsEnabled) {
+      return fail(
+        "AI suggestions are turned off for this trip. The owner can turn them on from Preferences.",
+      );
+    }
+
+    // Persistent quota: one atomic reservation per request; provider
+    // retries share it. FAILED settlements release the reservation.
+    const reservation = await reserveAiGeneration({
+      tripId,
+      userId,
+      provider: PROVIDER_NAME,
+    });
+    if (!reservation.ok) return fail(quotaMessage(reservation.scope));
+
     const result = await generateActivitySuggestions(context);
-    if (!result.ok) return fail(result.error);
+    if (!result.ok) {
+      await failAiGeneration(reservation.generationId, {
+        attempts: result.meta.attempts,
+        durationMs: result.meta.durationMs,
+        validationFailed: result.meta.validationFailed,
+      });
+      return fail(result.error);
+    }
+    await completeAiGeneration(reservation.generationId, {
+      attempts: result.meta.attempts,
+      durationMs: result.meta.durationMs,
+    });
     return { success: true, data: { suggestions: result.suggestions } };
   } catch {
     // Never log the caught error: it can embed prompts, notes, or payloads.
