@@ -114,19 +114,63 @@ existing/planned duplicates are never repeated. `mustAvoid` is matched as
 case-insensitive substrings against suggested titles. Reuse the same
 fixtures to qualify a real provider.
 
-## Real-provider enablement requirements (do all before turning on)
+## Per-trip controls and persistent limits (implemented)
 
-1. **Disclosure + control**: per-trip notice that content goes to an external
-   provider, and explicit opt-in before `includeSensitiveNotes` can ever be
-   true. Without this, the flag stays mock-only.
-2. **Distributed rate limiting + usage budgets**: the in-memory timeout/retry
-   bounds are per-request safety, not production protection. Enforce
-   per-user/per-trip quotas and spend caps server-side (e.g. Upstash Redis or
-   equivalent) before any paid provider ships.
-3. **Operational monitoring**: log provider name, latency, retry counts, and
-   validation-failure rates (never prompt/response bodies); alert onspikes.
-4. **Key management**: provider credentials server-side only (Vercel env),
-   never bundled — the current code paths import no secrets anywhere.
-5. **Re-run the full gate**: `npm run typecheck`, `npm test`,
+- **Per-trip consent** (`TripAiSetting`, `actions/ai-settings.ts`): off by
+  default per trip. The owner enables suggestions from Preferences after
+  the disclosure (destination, dates, budget, idea/itinerary titles, group
+  preference summary) and an explicit confirmation checkbox; who confirmed
+  and when is recorded. Disabling keeps the record. Non-owners see the
+  state but cannot change it. Generation requires the global flag **and**
+  the trip setting. The panel distinguishes today's local mock ("nothing
+  leaves the server") from future external processing, which this same
+  consent gates. Dietary/accessibility notes stay excluded — consent here
+  never covers them, and no sensitive-note sharing exists.
+- **Ownership changes**: settings updates lock the Trip row, then recheck
+  current ownership and write the setting in the same transaction. A former
+  owner cannot change consent after an ownership transfer wins that lock.
+- **Admission and revocation**: membership and per-trip consent are rechecked
+  inside the quota reservation transaction, under the Trip lock. Successful
+  reservation is the point at which a generation is admitted. If removal or
+  disablement wins the lock, the pending request is rejected before the
+  provider runs and no ledger row is created. If reservation wins first,
+  that admitted request may finish even after removal or disablement commits;
+  those changes block later admissions. No transaction or row lock is held
+  open during the provider call.
+- **Persistent quotas** (`AiGeneration` ledger, `lib/ai/usage.ts`):
+  per-user (20/day) and per-trip (50/day) limits, configured by
+  `AI_SUGGEST_USER_DAILY_LIMIT` / `AI_SUGGEST_TRIP_DAILY_LIMIT` (strictly
+  parsed). Reservation is atomic (Trip row lock, then User row lock;
+  RESERVED rows count while in flight, so concurrent requests cannot
+  bypass a limit). Completion consumes quota; failure (timeout, provider
+  error, validation failure) releases it. Provider retries share one
+  reservation and only raise `attempts`. Limit rejections return clear
+  per-scope messages. Enforcement and any future credentials live
+  server-side only.
+- **Failure settlement**: expected generation failures and unexpected thrown
+  errors attempt to settle the reservation as FAILED, releasing its slot.
+  Settlement only changes RESERVED rows: repeated or conflicting callbacks
+  cannot overwrite a terminal outcome or its metadata. If settlement itself
+  fails (for example during a database outage), the action preserves the
+  generation's success/error response and logs only static metadata. The row
+  conservatively stays RESERVED and counts for the remainder of its UTC day.
+  A later idempotent settlement can reconcile it without repeating generation;
+  no automatic reconciliation worker exists yet. A process crash before
+  settlement has the same conservative accounting behavior.
+- **Operational metadata**: every settled generation records provider,
+  status, attempts, duration, and `validationFailed` — never prompts,
+  suggestions, notes, or response bodies.
+
+## Real-provider enablement requirements (remaining)
+
+1. **Provider adapter + credentials**: implement `AiSuggestionProvider`
+   once, store keys server-side only (Vercel env), select it in
+   `actions/ai-suggestions.ts`. Consent, quotas, and metadata above are
+   already in place and apply unchanged.
+2. **Spend caps beyond request counts**: quotas bound request volume, not
+   token spend; add per-request token/cost ceilings with the adapter.
+3. **Alerting**: alert on FAILED/`validationFailed` rates and latency from
+   the `AiGeneration` ledger (dashboards may read it; it holds no content).
+4. **Re-run the full gate**: `npm run typecheck`, `npm test`,
    `npm run test:integration`, `npm run test:e2e` against a disposable DB,
    plus a screenshot pass of the preview on desktop and mobile.

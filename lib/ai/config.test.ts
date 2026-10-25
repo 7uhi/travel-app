@@ -1,8 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { aiMaxRetries, aiRequestTimeoutMs } from "@/lib/ai/config";
+import {
+  aiMaxRetries,
+  aiRequestTimeoutMs,
+  aiTripDailyLimit,
+  aiUserDailyLimit,
+} from "@/lib/ai/config";
 
-const KEYS = ["AI_SUGGEST_TIMEOUT_MS", "AI_SUGGEST_MAX_RETRIES"] as const;
+const KEYS = [
+  "AI_SUGGEST_TIMEOUT_MS",
+  "AI_SUGGEST_MAX_RETRIES",
+  "AI_SUGGEST_USER_DAILY_LIMIT",
+  "AI_SUGGEST_TRIP_DAILY_LIMIT",
+] as const;
 const saved = new Map<string, string | undefined>();
 
 function setEnv(name: string, value: string | undefined): void {
@@ -63,4 +73,26 @@ describe("aiMaxRetries", () => {
       expect(aiMaxRetries()).toBe(1);
     },
   );
+});
+
+describe("daily generation limits", () => {
+  it("defaults to 20 per user and 50 per trip", () => {
+    setEnv("AI_SUGGEST_USER_DAILY_LIMIT", undefined);
+    setEnv("AI_SUGGEST_TRIP_DAILY_LIMIT", undefined);
+    expect(aiUserDailyLimit()).toBe(20);
+    expect(aiTripDailyLimit()).toBe(50);
+  });
+
+  it.each(["0", "-3", "abc", "2.5"])(
+    "falls back to defaults for invalid user limit %j",
+    (value) => {
+      setEnv("AI_SUGGEST_USER_DAILY_LIMIT", value);
+      expect(aiUserDailyLimit()).toBe(20);
+    },
+  );
+
+  it("accepts in-range values", () => {
+    setEnv("AI_SUGGEST_TRIP_DAILY_LIMIT", "3");
+    expect(aiTripDailyLimit()).toBe(3);
+  });
 });

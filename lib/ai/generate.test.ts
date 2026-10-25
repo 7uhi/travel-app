@@ -39,16 +39,19 @@ describe("generateActivitySuggestions", () => {
   it("refuses when the feature flag is off", async () => {
     delete process.env.AI_SUGGESTIONS_ENABLED;
     const result = await generateActivitySuggestions(context);
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining("not enabled"),
+      meta: { attempts: 0, validationFailed: false },
     });
   });
 
   it("is deterministic for the same input", async () => {
     const first = await generateActivitySuggestions(context);
     const second = await generateActivitySuggestions(context);
-    expect(first).toEqual(second);
+    expect(first.ok && first.suggestions).toEqual(
+      second.ok && second.suggestions,
+    );
     expect(first.ok && first.suggestions.length).toBeGreaterThan(0);
   });
 
@@ -66,9 +69,10 @@ describe("generateActivitySuggestions", () => {
       const result = await generateActivitySuggestions(context, {
         provider: new MockSuggestionProvider({ mode: "timeout" }),
       });
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         ok: false,
         error: expect.stringContaining("timed out"),
+        meta: { validationFailed: false },
       });
     } finally {
       delete process.env.AI_SUGGEST_TIMEOUT_MS;
@@ -84,7 +88,7 @@ describe("generateActivitySuggestions", () => {
     };
     const started = Date.now();
     const result = await generateActivitySuggestions(context, { provider: never });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining("timed out"),
     });
@@ -111,7 +115,7 @@ describe("generateActivitySuggestions", () => {
       rawOutput: JSON.stringify({ suggestions: [{ title: "Too late" }] }),
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining("timed out"),
     });
@@ -132,7 +136,7 @@ describe("generateActivitySuggestions", () => {
     expect(result.ok).toBe(false);
     rejectLate(new Error("late boom with private detail"));
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining("timed out"),
     });
@@ -374,9 +378,10 @@ describe("generateActivitySuggestions", () => {
       ],
     };
     const result = await generateActivitySuggestions(huge, { provider: counting });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining("too much context"),
+      meta: { attempts: 0 },
     });
     expect(calls).toBe(0);
   });

@@ -53,6 +53,14 @@ async function seedOwnTrip(db: PrismaClient) {
       },
     },
   });
+  await db.tripAiSetting.create({
+    data: {
+      tripId: trip.id,
+      suggestionsEnabled: true,
+      enabledById: owner.id,
+      enabledAt: new Date(),
+    },
+  });
   return { trip, owner, editor, viewer };
 }
 
@@ -169,6 +177,67 @@ test.describe("AI suggestion preview (mock, enabled)", () => {
     ).toBeVisible();
     await conflicts.scrollIntoViewIfNeeded();
     await snap(page, testInfo, "preference-conflicts");
+  });
+});
+
+test.describe("per-trip AI consent (enabled server)", () => {
+  test.skip(!ENABLED, "requires AI_SUGGESTIONS_ENABLED=1 on the test server");
+
+  test("owner enables suggestions only after explicit confirmation", async ({
+    page,
+    db,
+    signIn,
+  }, testInfo) => {
+    const { trip, owner } = await seedOwnTrip(db);
+    await db.tripAiSetting.update({
+      where: { tripId: trip.id },
+      data: { suggestionsEnabled: false },
+    });
+    await signIn(owner);
+    await page.goto(`/trips/${trip.id}/preferences`);
+
+    const panel = page.locator('section[aria-label="AI suggestion settings"]');
+    await expect(panel.getByText("What a provider would receive")).toBeVisible();
+    await expect(
+      panel.getByText(/Never sent: dietary or accessibility notes/),
+    ).toBeVisible();
+    const enable = panel.getByRole("button", { name: "Turn on for this trip" });
+    await expect(enable).toBeDisabled();
+
+    await panel.getByRole("checkbox").check();
+    await expect(enable).toBeEnabled();
+    await enable.click();
+    await expect(panel.getByText(/Turned on/)).toBeVisible();
+    await snap(page, testInfo, "ai-consent-enabled");
+
+    await page.goto(`/trips/${trip.id}/ideas`);
+    await expect(
+      page.locator('section[aria-label="Suggested ideas preview"]'),
+    ).toBeVisible();
+
+    await page.goto(`/trips/${trip.id}/preferences`);
+    await panel.getByRole("button", { name: "Turn off for this trip" }).click();
+    await expect(panel.getByText("Turned off for this trip.", { exact: false })).toBeVisible();
+    await page.goto(`/trips/${trip.id}/ideas`);
+    await expect(
+      page.locator('section[aria-label="Suggested ideas preview"]'),
+    ).toHaveCount(0);
+  });
+
+  test("viewer sees the state but cannot change it", async ({
+    page,
+    db,
+    signIn,
+  }) => {
+    const { trip, viewer } = await seedOwnTrip(db);
+    await signIn(viewer);
+    await page.goto(`/trips/${trip.id}/preferences`);
+
+    const panel = page.locator('section[aria-label="AI suggestion settings"]');
+    await expect(panel.getByText("Only the trip owner can change this.")).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: /Turn (on|off) for this trip/ }),
+    ).toHaveCount(0);
   });
 });
 
