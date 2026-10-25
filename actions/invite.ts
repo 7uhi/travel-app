@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";

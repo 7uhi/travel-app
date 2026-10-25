@@ -1,4 +1,4 @@
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { testDatabaseUrl } from "../tests/database";
 
@@ -9,5 +9,5 @@ export const AUTH_SECRET = process.env.AUTH_SECRET ?? "e2e-insecure-auth-secret"
 export const DATABASE_URL = testDatabaseUrl();
 
 export function authStatePath(user: string): string {
-  return path.join(__dirname, ".auth", `${user}.json`);
+  return fileURLToPath(new URL(`./.auth/${user}.json`, import.meta.url));
 }

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../generated/prisma/client";
 
 const LOCAL_TEST_DATABASE_URL = "postgresql://postgres@localhost:5432/travel_test";
 
