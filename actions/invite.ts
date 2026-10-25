@@ -165,40 +165,54 @@ export async function acceptInvite(
   if (!token) return fail("This invite link is invalid.");
 
   try {
-    const invite = await prisma.invite.findUnique({
-      where: { token },
-      select: { tripId: true, role: true, expiresAt: true, revokedAt: true },
-    });
+    // Lock order is Trip, then Invite — the same order membership cleanup
+    // (removeMember/leaveTrip/setMemberRole) already uses when it revokes a
+    // departing or demoted creator's links. Taking Invite first here
+    // deadlocked against that cleanup (acceptance held Invite and needed
+    // Trip for the membership insert; cleanup held Trip and needed
+    // Invite). With both sides in one order the operations simply
+    // serialize, and the revoked/expired checks below are re-read after
+    // the locks are held — a link revoked first can never grant access.
+    const outcome: { error: string } | { data: { tripId: string; alreadyMember: boolean } } =
+      await prisma.$transaction(async (tx) => {
+      const found = await tx.invite.findUnique({
+        where: { token },
+        select: { id: true, tripId: true },
+      });
+      if (!found) return { error: "This invite link is invalid." };
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${found.tripId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "Invite" WHERE id = ${found.id} FOR UPDATE`;
 
-    // Ownership is never granted by link, even if a row somehow says so.
-    if (!invite || invite.role === "OWNER") {
-      return fail("This invite link is invalid.");
-    }
-    if (invite.revokedAt) return fail(REVOKED_MESSAGE);
-    if (invite.expiresAt < new Date()) {
-      return fail("This invite link has expired. Ask for a new one.");
-    }
+      const invite = await tx.invite.findUnique({
+        where: { id: found.id },
+        select: { tripId: true, role: true, expiresAt: true, revokedAt: true },
+      });
+      // Ownership is never granted by link, even if a row somehow says so.
+      if (!invite || invite.role === "OWNER") {
+        return { error: "This invite link is invalid." };
+      }
+      if (invite.revokedAt) return { error: REVOKED_MESSAGE };
+      if (invite.expiresAt < new Date()) {
+        return { error: "This invite link has expired. Ask for a new one." };
+      }
 
-    const existing = await prisma.tripMember.findUnique({
-      where: { userId_tripId: { userId, tripId: invite.tripId } },
-      select: { id: true },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { tripId: invite.tripId, alreadyMember: true },
-      };
-    }
+      const existing = await tx.tripMember.findUnique({
+        where: { userId_tripId: { userId, tripId: invite.tripId } },
+        select: { id: true },
+      });
+      if (existing) {
+        return { data: { tripId: invite.tripId, alreadyMember: true } };
+      }
 
-    await prisma.tripMember.create({
-      data: { userId, tripId: invite.tripId, role: invite.role },
+      await tx.tripMember.create({
+        data: { userId, tripId: invite.tripId, role: invite.role },
+      });
+      return { data: { tripId: invite.tripId, alreadyMember: false } };
     });
+    if ("error" in outcome) return fail(outcome.error);
 
     revalidatePath("/trips");
-    return {
-      success: true,
-      data: { tripId: invite.tripId, alreadyMember: false },
-    };
+    return { success: true, data: outcome.data };
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -297,36 +311,52 @@ export async function revokeInvite(
   if (!parseInput(idSchema, inviteId)) return fail(INVALID_INPUT);
 
   try {
-    const invite = await prisma.invite.findUnique({
-      where: { id: inviteId },
-      select: {
-        createdBy: true,
-        revokedAt: true,
-        trip: {
-          select: { members: { where: { userId }, select: { role: true } } },
-        },
-      },
-    });
-
-    // Non-members get the same answer as a missing invite: no existence leaks.
-    const membership = invite?.trip.members[0];
-    if (!invite || !membership) return fail("Invite not found.");
-    if (
-      !canRevokeInvite(membership.role, userId, {
-        createdById: invite.createdBy,
-      })
-    ) {
-      return fail(
-        "Only the trip owner or whoever created this link can revoke it.",
-      );
-    }
-
-    if (!invite.revokedAt) {
-      await prisma.invite.update({
+    // Lock order is Trip, then Invite (acceptance and membership cleanup
+    // use the same order), with authorization rechecked after the locks
+    // are held.
+    const outcome = await prisma.$transaction(async (tx) => {
+      const found = await tx.invite.findUnique({
         where: { id: inviteId },
-        data: { revokedAt: new Date() },
+        select: { id: true, tripId: true },
       });
-    }
+      if (!found) return { error: "Invite not found." };
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${found.tripId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "Invite" WHERE id = ${found.id} FOR UPDATE`;
+
+      const invite = await tx.invite.findUnique({
+        where: { id: found.id },
+        select: {
+          createdBy: true,
+          revokedAt: true,
+          trip: {
+            select: { members: { where: { userId }, select: { role: true } } },
+          },
+        },
+      });
+
+      // Non-members get the same answer as a missing invite: no existence leaks.
+      const membership = invite?.trip.members[0];
+      if (!invite || !membership) return { error: "Invite not found." };
+      if (
+        !canRevokeInvite(membership.role, userId, {
+          createdById: invite.createdBy,
+        })
+      ) {
+        return {
+          error:
+            "Only the trip owner or whoever created this link can revoke it.",
+        };
+      }
+
+      if (!invite.revokedAt) {
+        await tx.invite.update({
+          where: { id: inviteId },
+          data: { revokedAt: new Date() },
+        });
+      }
+      return null;
+    });
+    if (outcome) return fail(outcome.error);
 
     return { success: true, data: { id: inviteId } };
   } catch (error) {

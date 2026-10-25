@@ -15,6 +15,7 @@ import {
   aggregateGroupProfile,
   aggregateTripPreferences,
   findPreferenceConflicts,
+  findTripConflicts,
   resolveEffectiveProfile,
 } from "@/lib/preferences";
 
@@ -54,7 +55,15 @@ export default async function TripPreferencesPage({
   const groupTrip = aggregateTripPreferences(
     members.map((m) => m.trip).filter((t) => t !== null),
   );
-  const conflicts = findPreferenceConflicts(effective);
+  const tripConflicts = findTripConflicts(
+    members.map((m) => m.trip).filter((t) => t !== null),
+  );
+  const conflicts = [...findPreferenceConflicts(effective), ...tripConflicts].sort(
+    (a, b) =>
+      b.severity - a.severity ||
+      a.kind.localeCompare(b.kind) ||
+      (a.tag ?? "").localeCompare(b.tag ?? ""),
+  );
 
   const names = new Map(
     members.map((m) => [m.userId, m.name ?? "Member"] as const),
@@ -111,6 +120,7 @@ export default async function TripPreferencesPage({
             <GroupConsensusPanel
               group={group}
               groupTrip={groupTrip}
+              tripConflicts={tripConflicts}
               memberCount={members.length}
               destinationUndecided={trip.destination === null}
               setDestinationFor={

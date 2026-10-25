@@ -11,7 +11,20 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  reporter: [[isCI ? "github" : "list"], ["html", { open: "never" }]],
+  // Separate evidence per run (disabled vs enabled) when the caller sets
+  // these, so the two CI runs never overwrite each other's artifacts.
+  outputDir: process.env.PLAYWRIGHT_RESULTS_DIR ?? "test-results",
+  reporter: [
+    [isCI ? "github" : "list"],
+    [
+      "html",
+      {
+        open: "never",
+        outputFolder:
+          process.env.PLAYWRIGHT_REPORT_DIR ?? "playwright-report",
+      },
+    ],
+  ],
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-failure",
@@ -40,6 +53,9 @@ export default defineConfig({
       AUTH_TRUST_HOST: "true",
       AUTH_URL: BASE_URL,
       DATABASE_URL,
+      // Off unless the run explicitly enables the mock preview, e.g.
+      // AI_SUGGESTIONS_ENABLED=1 npm run test:e2e -- e2e/ai-suggestions.spec.ts
+      AI_SUGGESTIONS_ENABLED: process.env.AI_SUGGESTIONS_ENABLED ?? "0",
     },
   },
 });

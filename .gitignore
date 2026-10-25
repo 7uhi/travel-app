@@ -18,6 +18,10 @@ myenv/
 # playwright
 /test-results/
 /playwright-report/
+/test-results-disabled/
+/test-results-enabled/
+/playwright-report-disabled/
+/playwright-report-enabled/
 /e2e/.auth/
 
 # misc

@@ -218,7 +218,10 @@ components/                                UI (server + client components)
   deterministic regardless of member order. It's the single seam any future AI
   feature should call — `profileToPromptContext` renders the group as one
   stable text block (no `Intl`, no `Date.now()`) so every feature describes the
-  group identically instead of re-deriving it.
+  group identically instead of re-deriving it. Disagreeing region/climate
+  answers are reported by `findTripConflicts` and stated explicitly in both
+  the UI and the prompt context — an empty intersection never silently means
+  "nobody answered".
 
 ### Auth architecture
 
@@ -293,3 +296,19 @@ Notes on the e2e suite:
   editor and the viewer each owe the owner $10.
 - Failures leave traces and screenshots in `playwright-report/`
   (`npx playwright show-report`).
+
+## AI suggestions (preview, off by default)
+
+The Ideas tab can show mock activity suggestions for review. It runs entirely
+in-process — no API keys, no network calls — and is disabled unless
+`AI_SUGGESTIONS_ENABLED=1` (see `.env.example`):
+
+```sh
+AI_SUGGESTIONS_ENABLED=1 npm run dev
+```
+
+Any trip member may generate suggestions; applying one calls the existing
+`addIdea` action, so only owners/editors can add and every field is validated
+as usual. Details, privacy boundaries, and what must happen before a real
+provider is wired in: `docs/ai-readiness.md`. Audit findings from the latest
+pass: `docs/project-audit.md`.

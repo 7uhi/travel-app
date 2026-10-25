@@ -61,6 +61,10 @@ function title(conflict: PreferenceConflict): string {
       return "How much to spend";
     case "dayRhythm":
       return "Early starts vs late nights";
+    case "region":
+      return "Where to go";
+    case "climate":
+      return "What weather to go for";
   }
 }
 

@@ -6,7 +6,9 @@ import { auth } from "@/auth";
 import { LoadError } from "@/components/LoadError";
 import { TripHeader } from "@/components/TripHeader";
 import { AddIdeaButton } from "@/components/ideas/AddIdeaButton";
+import { AiSuggestions } from "@/components/ideas/AiSuggestions";
 import { IdeaCard } from "@/components/ideas/IdeaCard";
+import { isAiSuggestionsEnabled } from "@/lib/ai/config";
 
 export default async function TripIdeasPage({
   params,
@@ -44,6 +46,12 @@ export default async function TripIdeasPage({
           <h2 className="font-display text-2xl">Activity ideas</h2>
           {canEdit && <AddIdeaButton tripId={trip.id} />}
         </div>
+
+        {isAiSuggestionsEnabled() && (
+          <div className="mb-4">
+            <AiSuggestions tripId={trip.id} canApply={canEdit} />
+          </div>
+        )}
 
         {ideas.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white/60 p-8 text-center text-sm text-stone-500">

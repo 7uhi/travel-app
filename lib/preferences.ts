@@ -279,7 +279,7 @@ export function aggregateTripPreferences(
 /* ------------------------------------------------------------------ */
 
 export interface PreferenceConflict {
-  kind: "interest" | "pace" | "budget" | "dayRhythm";
+  kind: "interest" | "pace" | "budget" | "dayRhythm" | "region" | "climate";
   /** Set only for kind "interest". */
   tag: InterestTag | null;
   /** Display-ready one-liner, e.g. "2 keen, 1 would skip". */
@@ -382,6 +382,92 @@ export function findPreferenceConflicts(
 }
 
 /* ------------------------------------------------------------------ */
+/* Trip-dimension conflicts                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Where the group wants incompatible things for this trip: region or climate
+ * answers with no single option that works for everyone.
+ *
+ * Unlike `aggregateTripPreferences` — which collapses disagreement to an
+ * empty array that is indistinguishable from "nobody answered" — each entry
+ * here names the dimension and the distinct answers given, most-voted first
+ * (ties alphabetical), so the UI and the AI context can say "no compatible
+ * option" instead of silently dropping the question. Deterministic for any
+ * input order.
+ */
+export function findTripConflicts(
+  prefs: TripPreferenceSummary[],
+): PreferenceConflict[] {
+  const conflicts: PreferenceConflict[] = [];
+  const region = disagreeingCamps(prefs, (p) => p.preferredRegion, "ANYWHERE");
+  if (region) {
+    conflicts.push({
+      kind: "region",
+      tag: null,
+      summary: `want different regions: ${region.summary}`,
+      forUserIds: region.forUserIds,
+      againstUserIds: region.againstUserIds,
+      severity: 2,
+    });
+  }
+  const climate = disagreeingCamps(
+    prefs,
+    (p) => p.preferredClimate,
+    "NO_PREFERENCE",
+  );
+  if (climate) {
+    conflicts.push({
+      kind: "climate",
+      tag: null,
+      summary: `want different weather: ${climate.summary}`,
+      forUserIds: climate.forUserIds,
+      againstUserIds: climate.againstUserIds,
+      severity: 2,
+    });
+  }
+  return conflicts.sort(
+    (a, b) => b.severity - a.severity || a.kind.localeCompare(b.kind),
+  );
+}
+
+/**
+ * The distinct specific answers for one trip dimension, or null when there
+ * is no disagreement: nobody answered specifically, everyone agrees, or the
+ * only answers are "don't care". `forUserIds` holds the largest camp
+ * (ties: the alphabetically-first value); `againstUserIds` holds everyone
+ * else who answered specifically. All ids sorted.
+ */
+function disagreeingCamps<T extends string>(
+  prefs: TripPreferenceSummary[],
+  pick: (pref: TripPreferenceSummary) => T | null,
+  identity: T,
+): { summary: string; forUserIds: string[]; againstUserIds: string[] } | null {
+  const byValue = new Map<T, string[]>();
+  for (const pref of prefs) {
+    const value = pick(pref);
+    if (value === null || value === identity) continue;
+    const ids = byValue.get(value);
+    if (ids) ids.push(pref.userId);
+    else byValue.set(value, [pref.userId]);
+  }
+  if (byValue.size < 2) return null;
+  const camps = [...byValue.entries()]
+    .map(([value, userIds]) => ({ value, userIds: [...userIds].sort() }))
+    .sort(
+      (a, b) => b.userIds.length - a.userIds.length || a.value.localeCompare(b.value),
+    );
+  return {
+    summary: camps.map((camp) => camp.value).join(" vs "),
+    forUserIds: camps[0].userIds,
+    againstUserIds: camps
+      .slice(1)
+      .flatMap((camp) => camp.userIds)
+      .sort(),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Prompt context                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -394,7 +480,10 @@ export function findPreferenceConflicts(
  * notes sorted by userId; dates as ISO YYYY-MM-DD; no Intl (its output varies
  * with the runtime's ICU version, which would break both snapshot tests and
  * any future prompt caching); no Date.now(). Empty sections are omitted
- * entirely rather than emitted with a placeholder.
+ * entirely rather than emitted with a placeholder — except an incompatible
+ * region/climate intersection, which is stated explicitly ("no compatible
+ * option") so a reader can tell "nobody answered" apart from "members
+ * disagree".
  *
  * Pass the durable profiles: per-trip overrides are applied here, so a caller
  * can't accidentally describe the group by their usual preferences when
@@ -427,7 +516,14 @@ export function profileToPromptContext(input: {
 
   const group = aggregateGroupProfile(effective);
   const groupTrip = aggregateTripPreferences(input.tripPreferences);
-  const conflicts = findPreferenceConflicts(effective);
+  const tripConflicts = findTripConflicts(input.tripPreferences);
+  const tripConflictByKind = new Map(tripConflicts.map((c) => [c.kind, c]));
+  const conflicts = [...findPreferenceConflicts(effective), ...tripConflicts].sort(
+    (a, b) =>
+      b.severity - a.severity ||
+      a.kind.localeCompare(b.kind) ||
+      (a.tag ?? "").localeCompare(b.tag ?? ""),
+  );
   const lines: string[] = [];
 
   lines.push("TRIP");
@@ -488,9 +584,22 @@ export function profileToPromptContext(input: {
   const where: string[] = [];
   if (groupTrip.regions.length > 0) {
     where.push(`Region: ${groupTrip.regions.join("/")}`);
+  } else {
+    // An empty intersection is ambiguous on its own: "nobody answered" and
+    // "no single option works for everyone" both collapse to []. Only the
+    // second is stated, so "unanswered" stays silent and "disagree" is loud.
+    const regionConflict = tripConflictByKind.get("region");
+    if (regionConflict) {
+      where.push(`Region: no compatible option (${regionConflict.summary})`);
+    }
   }
   if (groupTrip.climates.length > 0) {
     where.push(`climate: ${groupTrip.climates.join("/")}`);
+  } else {
+    const climateConflict = tripConflictByKind.get("climate");
+    if (climateConflict) {
+      where.push(`climate: no compatible option (${climateConflict.summary})`);
+    }
   }
   if (groupTrip.maxTravelHours !== null) {
     where.push(`max travel: ${groupTrip.maxTravelHours}h`);

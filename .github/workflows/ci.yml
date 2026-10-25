@@ -91,10 +91,33 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # Default run: feature stays disabled, covering the disabled path.
+      # Evidence goes to its own directories so the enabled run below can
+      # never overwrite it.
       - run: npm run test:e2e
+        env:
+          PLAYWRIGHT_REPORT_DIR: playwright-report-disabled
+          PLAYWRIGHT_RESULTS_DIR: test-results-disabled
+      # Explicitly enabled mock run: the AI preview spec executes (not skips).
+      - run: npx playwright test e2e/ai-suggestions.spec.ts
+        env:
+          AI_SUGGESTIONS_ENABLED: "1"
+          PLAYWRIGHT_REPORT_DIR: playwright-report-enabled
+          PLAYWRIGHT_RESULTS_DIR: test-results-enabled
+      # Screenshots/traces are review evidence on success too, not just failure.
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: playwright-disabled
+          path: |
+            playwright-report-disabled/
+            test-results-disabled/
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-enabled
+          path: |
+            playwright-report-enabled/
+            test-results-enabled/
           retention-days: 14
