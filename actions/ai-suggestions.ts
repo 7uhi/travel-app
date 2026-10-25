@@ -18,11 +18,24 @@ import { currentUserId } from "@/lib/session";
 const PROVIDER_NAME = "mock";
 
 /**
- * Generates activity-idea suggestions for a trip. Generation is read-only:
- * nothing is written — applying a suggestion means calling the existing
- * `addIdea` action (OWNER/EDITOR), which re-checks authorization and
- * validates every field. Any trip member may generate; only editors may
- * apply, consistent with the Ideas workflow.
+ * Settlement must never mask the generation outcome or leak content: a
+ * failed settle is logged statically (the row stays RESERVED and keeps
+ * counting until UTC day rollover; settling is idempotent, so a later
+ * settle can still land).
+ */
+async function settleSafely(settle: () => Promise<void>): Promise<void> {
+  try {
+    await settle();
+  } catch {
+    logSuggestionFailure();
+  }
+}
+
+/**
+ * Generates activity-idea suggestions and records quota/operational metadata.
+ * Applying a suggestion calls the existing `addIdea` action (OWNER/EDITOR),
+ * which re-checks authorization and validates every field. Any trip member
+ * may generate; only editors may apply, consistent with the Ideas workflow.
  */
 export async function suggestActivityIdeas(
   tripId: string,
@@ -53,27 +66,57 @@ export async function suggestActivityIdeas(
 
     // Persistent quota: one atomic reservation per request; provider
     // retries share it. FAILED settlements release the reservation.
+    // Membership and consent are rechecked inside the reservation's lock
+    // (admission), so unlocked reads above are only a fast path.
     const reservation = await reserveAiGeneration({
       tripId,
       userId,
       provider: PROVIDER_NAME,
     });
-    if (!reservation.ok) return fail(quotaMessage(reservation.scope));
-
-    const result = await generateActivitySuggestions(context);
-    if (!result.ok) {
-      await failAiGeneration(reservation.generationId, {
-        attempts: result.meta.attempts,
-        durationMs: result.meta.durationMs,
-        validationFailed: result.meta.validationFailed,
-      });
-      return fail(result.error);
+    if (!reservation.ok) {
+      if (reservation.scope === "not_member") return fail("Trip not found.");
+      if (reservation.scope === "disabled") {
+        return fail(
+          "AI suggestions are turned off for this trip. The owner can turn them on from Preferences.",
+        );
+      }
+      return fail(quotaMessage(reservation.scope));
     }
-    await completeAiGeneration(reservation.generationId, {
-      attempts: result.meta.attempts,
-      durationMs: result.meta.durationMs,
-    });
-    return { success: true, data: { suggestions: result.suggestions } };
+
+    const generationId = reservation.generationId;
+    const startedAt = Date.now();
+    try {
+      const result = await generateActivitySuggestions(context);
+      if (!result.ok) {
+        await settleSafely(() =>
+          failAiGeneration(generationId, {
+            attempts: result.meta.attempts,
+            durationMs: result.meta.durationMs,
+            validationFailed: result.meta.validationFailed,
+          }),
+        );
+        return fail(result.error);
+      }
+      await settleSafely(() =>
+        completeAiGeneration(generationId, {
+          attempts: result.meta.attempts,
+          durationMs: result.meta.durationMs,
+        }),
+      );
+      return { success: true, data: { suggestions: result.suggestions } };
+    } catch (error) {
+      // Unexpected generation failure: the reservation must still settle
+      // (FAILED, quota released) instead of leaking as RESERVED. Re-throw
+      // into the outer handler for the generic response.
+      await settleSafely(() =>
+        failAiGeneration(generationId, {
+          attempts: 0,
+          durationMs: Date.now() - startedAt,
+          validationFailed: false,
+        }),
+      );
+      throw error;
+    }
   } catch {
     // Never log the caught error: it can embed prompts, notes, or payloads.
     logSuggestionFailure();

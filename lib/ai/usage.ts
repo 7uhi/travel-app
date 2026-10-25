@@ -23,7 +23,7 @@ export type QuotaScope = "user" | "trip";
 
 export type ReserveResult =
   | { ok: true; generationId: string }
-  | { ok: false; scope: QuotaScope };
+  | { ok: false; scope: QuotaScope | "not_member" | "disabled" };
 
 function utcDayStart(now: Date): Date {
   return new Date(
@@ -42,6 +42,25 @@ export async function reserveAiGeneration(input: {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${input.tripId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${input.userId} FOR UPDATE`;
+
+    // Admission is defined here, under the locks: membership and consent
+    // are rechecked at reservation time, not trusted from the caller's
+    // earlier unlocked reads. A removal or disablement that won the Trip
+    // lock blocks this request (no ledger row is created); a request
+    // admitted first may finish even if consent is later withdrawn. The
+    // transaction never spans the provider call itself.
+    const membership = await tx.tripMember.findUnique({
+      where: { userId_tripId: { userId: input.userId, tripId: input.tripId } },
+      select: { id: true },
+    });
+    if (!membership) return { ok: false, scope: "not_member" };
+    const setting = await tx.tripAiSetting.findUnique({
+      where: { tripId: input.tripId },
+      select: { suggestionsEnabled: true },
+    });
+    if (!setting?.suggestionsEnabled) {
+      return { ok: false, scope: "disabled" };
+    }
 
     const [tripCount, userCount] = await Promise.all([
       tx.aiGeneration.count({
@@ -67,12 +86,20 @@ export async function reserveAiGeneration(input: {
   });
 }
 
+/**
+ * Settlement is idempotent: only a RESERVED row can settle, so settling
+ * twice (or after a racing settle) is a no-op rather than an error. If a
+ * settle call itself fails (e.g. database unavailable), the row stays
+ * RESERVED and keeps counting against quota until the UTC day rolls over
+ * — the caller logs statically and a later idempotent settle can still
+ * land; rows are never deleted to free quota.
+ */
 export async function completeAiGeneration(
   generationId: string,
   meta: { attempts: number; durationMs: number },
 ): Promise<void> {
-  await prisma.aiGeneration.update({
-    where: { id: generationId },
+  await prisma.aiGeneration.updateMany({
+    where: { id: generationId, status: "RESERVED" },
     data: {
       status: "COMPLETED",
       attempts: meta.attempts,
@@ -86,8 +113,8 @@ export async function failAiGeneration(
   generationId: string,
   meta: { attempts: number; durationMs: number; validationFailed: boolean },
 ): Promise<void> {
-  await prisma.aiGeneration.update({
-    where: { id: generationId },
+  await prisma.aiGeneration.updateMany({
+    where: { id: generationId, status: "RESERVED" },
     data: {
       status: "FAILED",
       attempts: meta.attempts,

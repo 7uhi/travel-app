@@ -244,6 +244,53 @@ failed with `e2e/ai-suggestions.spec.ts(1,15): TS2305: Module
   typescript 7.0.2, prisma 7.10.1 — `tsc --noEmit` clean, unit 206/206,
   integration 200/200 (disposable Postgres), production build passes.
 
+## Per-trip AI admission and settlement (2026-10-25)
+
+Independent review reproduced four defects in the per-trip consent/quota
+feature at `70e2dc0` on `feature/per-trip-ai-controls`: a former
+owner could change settings after a queued ownership transfer; a pending
+generation could proceed after member removal or consent disablement won
+the Trip lock; and an unexpected generation exception stranded a RESERVED
+quota row. The original baseline passed 212 unit and 216 integration tests.
+
+- Settings writes now acquire the Trip lock and recheck current ownership
+  inside the same transaction as the consent update.
+- Reservation rechecks membership and consent under Trip then User locks.
+  Successful reservation defines admission: removal or disablement winning
+  the lock refuses the pending generation without calling the provider or
+  creating a ledger row. Requests admitted first may finish. Tests also
+  hold a provider response open while removal/disablement commits, proving
+  no database transaction is held across the provider call.
+- Expected and unexpected generation failures attempt FAILED settlement,
+  releasing quota. Conditional RESERVED-only updates make repeated or
+  conflicting settlement callbacks idempotent. If the settlement database
+  operation fails, the original generation result is preserved, logging is
+  static, and the reservation conservatively counts until its UTC day ends
+  or a later settlement reconciles it. No automatic reconciliation worker
+  is claimed. Tests cover both successful and failed generations during
+  settlement outages and reconciliation without another provider call.
+- The owner E2E flow now checks enabling with confirmation, then disabling
+  and verifying the suggestion preview disappears.
+
+Executed after the fixes, with the installed dependencies matching the
+lockfile (Next 16.4.3, TypeScript 7.0.2, Prisma 7.10.1):
+
+- Unit: **212/212**; integration: **227/227** across 15 files (11 new cases
+  over the original feature baseline); `npm run typecheck` clean.
+- Production build: **`npm run build -- --webpack` passed**. Default
+  Turbopack build remains blocked in this environment by a worker port bind
+  returning `Operation not permitted`, including an escalated retry. This
+  is recorded separately from a successful default/CI build.
+- E2E against the Webpack production server: disabled run **38 passed,
+  10 expected skips**; enabled AI spec **10 passed, 2 expected skips** on
+  desktop and 375px mobile. Evidence remains in the separate ignored
+  disabled/enabled report and results directories.
+- Database checks used a disposable loopback Postgres cluster in `/tmp`,
+  stopped and removed afterward. The development database was not migrated
+  or truncated. No GitHub CI run for these changes has been observed.
+
+The feature remains mock-only and disabled globally by default.
+
 ## Not run (and why)
 
 - `npm audit`: omitted deliberately; no dependency changes were made.

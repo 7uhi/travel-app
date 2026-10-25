@@ -126,6 +126,17 @@ fixtures to qualify a real provider.
   leaves the server") from future external processing, which this same
   consent gates. Dietary/accessibility notes stay excluded — consent here
   never covers them, and no sensitive-note sharing exists.
+- **Ownership changes**: settings updates lock the Trip row, then recheck
+  current ownership and write the setting in the same transaction. A former
+  owner cannot change consent after an ownership transfer wins that lock.
+- **Admission and revocation**: membership and per-trip consent are rechecked
+  inside the quota reservation transaction, under the Trip lock. Successful
+  reservation is the point at which a generation is admitted. If removal or
+  disablement wins the lock, the pending request is rejected before the
+  provider runs and no ledger row is created. If reservation wins first,
+  that admitted request may finish even after removal or disablement commits;
+  those changes block later admissions. No transaction or row lock is held
+  open during the provider call.
 - **Persistent quotas** (`AiGeneration` ledger, `lib/ai/usage.ts`):
   per-user (20/day) and per-trip (50/day) limits, configured by
   `AI_SUGGEST_USER_DAILY_LIMIT` / `AI_SUGGEST_TRIP_DAILY_LIMIT` (strictly
@@ -136,6 +147,16 @@ fixtures to qualify a real provider.
   reservation and only raise `attempts`. Limit rejections return clear
   per-scope messages. Enforcement and any future credentials live
   server-side only.
+- **Failure settlement**: expected generation failures and unexpected thrown
+  errors attempt to settle the reservation as FAILED, releasing its slot.
+  Settlement only changes RESERVED rows: repeated or conflicting callbacks
+  cannot overwrite a terminal outcome or its metadata. If settlement itself
+  fails (for example during a database outage), the action preserves the
+  generation's success/error response and logs only static metadata. The row
+  conservatively stays RESERVED and counts for the remainder of its UTC day.
+  A later idempotent settlement can reconcile it without repeating generation;
+  no automatic reconciliation worker exists yet. A process crash before
+  settlement has the same conservative accounting behavior.
 - **Operational metadata**: every settled generation records provider,
   status, attempts, duration, and `validationFailed` — never prompts,
   suggestions, notes, or response bodies.

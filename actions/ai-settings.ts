@@ -88,27 +88,36 @@ export async function setTripAiSuggestions(
   if (enabled && !confirmed) return fail(CONFIRM_REQUIRED);
 
   try {
-    const membership = await prisma.tripMember.findUnique({
-      where: { userId_tripId: { userId, tripId } },
-      select: { role: true },
-    });
-    if (!membership) return fail("Trip not found.");
-    if (membership.role !== "OWNER") {
-      return fail("Only the trip owner can change AI settings.");
-    }
+    // Serialized with ownership changes: the Trip lock is held while
+    // ownership is rechecked and the setting is written, so a queued
+    // transfer that finishes first revokes the former owner's authority
+    // before their settings change can land.
+    const outcome = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
+      const membership = await tx.tripMember.findUnique({
+        where: { userId_tripId: { userId, tripId } },
+        select: { role: true },
+      });
+      if (!membership) return { error: "Trip not found." };
+      if (membership.role !== "OWNER") {
+        return { error: "Only the trip owner can change AI settings." };
+      }
 
-    await prisma.tripAiSetting.upsert({
-      where: { tripId },
-      create: {
-        tripId,
-        suggestionsEnabled: enabled,
-        enabledById: enabled ? userId : null,
-        enabledAt: enabled ? new Date() : null,
-      },
-      update: enabled
-        ? { suggestionsEnabled: true, enabledById: userId, enabledAt: new Date() }
-        : { suggestionsEnabled: false },
+      await tx.tripAiSetting.upsert({
+        where: { tripId },
+        create: {
+          tripId,
+          suggestionsEnabled: enabled,
+          enabledById: enabled ? userId : null,
+          enabledAt: enabled ? new Date() : null,
+        },
+        update: enabled
+          ? { suggestionsEnabled: true, enabledById: userId, enabledAt: new Date() }
+          : { suggestionsEnabled: false },
+      });
+      return null;
     });
+    if (outcome) return fail(outcome.error);
 
     revalidatePath(`/trips/${tripId}/preferences`);
     revalidatePath(`/trips/${tripId}/ideas`);

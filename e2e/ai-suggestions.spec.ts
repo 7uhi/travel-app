@@ -214,6 +214,14 @@ test.describe("per-trip AI consent (enabled server)", () => {
     await expect(
       page.locator('section[aria-label="Suggested ideas preview"]'),
     ).toBeVisible();
+
+    await page.goto(`/trips/${trip.id}/preferences`);
+    await panel.getByRole("button", { name: "Turn off for this trip" }).click();
+    await expect(panel.getByText("Turned off for this trip.", { exact: false })).toBeVisible();
+    await page.goto(`/trips/${trip.id}/ideas`);
+    await expect(
+      page.locator('section[aria-label="Suggested ideas preview"]'),
+    ).toHaveCount(0);
   });
 
   test("viewer sees the state but cannot change it", async ({

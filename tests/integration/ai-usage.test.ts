@@ -104,6 +104,7 @@ describe("reserveAiGeneration", () => {
   it("counts in-flight reservations so concurrent requests cannot bypass the limit", async () => {
     process.env.AI_SUGGEST_TRIP_DAILY_LIMIT = "1";
     const seed = await seedTripWithRoles();
+    await enableAi(seed.trip.id, seed.owner.id);
     const other = await seedUser({ name: "Second Generator" });
     await prisma.tripMember.create({
       data: { tripId: seed.trip.id, userId: other.id, role: "VIEWER" },
@@ -134,6 +135,7 @@ describe("reserveAiGeneration", () => {
   it("releases quota when a generation fails, but keeps the record", async () => {
     process.env.AI_SUGGEST_TRIP_DAILY_LIMIT = "1";
     const seed = await seedTripWithRoles();
+    await enableAi(seed.trip.id, seed.owner.id);
 
     const reserved = await reserveAiGeneration({
       tripId: seed.trip.id,
@@ -163,6 +165,7 @@ describe("reserveAiGeneration", () => {
   it("consumes quota on completion", async () => {
     process.env.AI_SUGGEST_USER_DAILY_LIMIT = "1";
     const seed = await seedTripWithRoles();
+    await enableAi(seed.trip.id, seed.owner.id);
 
     const reserved = await reserveAiGeneration({
       tripId: seed.trip.id,
@@ -183,4 +186,34 @@ describe("reserveAiGeneration", () => {
       }),
     ).toEqual({ ok: false, scope: "user" });
   });
+
+  it.each(["COMPLETED", "FAILED"] as const)(
+    "does not overwrite a %s settlement with repeated or conflicting callbacks",
+    async (status) => {
+      const seed = await seedTripWithRoles();
+      await enableAi(seed.trip.id, seed.owner.id);
+      const reserved = await reserveAiGeneration({
+        tripId: seed.trip.id, userId: seed.viewer.id, provider: "mock",
+      });
+      if (!reserved.ok) throw new Error("reservation should succeed");
+      if (status === "COMPLETED") {
+        await completeAiGeneration(reserved.generationId, { attempts: 1, durationMs: 40 });
+      } else {
+        await failAiGeneration(reserved.generationId, {
+          attempts: 2, durationMs: 80, validationFailed: true,
+        });
+      }
+      const settled = await prisma.aiGeneration.findUniqueOrThrow({
+        where: { id: reserved.generationId },
+      });
+
+      await completeAiGeneration(reserved.generationId, { attempts: 3, durationMs: 120 });
+      await failAiGeneration(reserved.generationId, {
+        attempts: 3, durationMs: 120, validationFailed: false,
+      });
+      expect(await prisma.aiGeneration.findUniqueOrThrow({
+        where: { id: reserved.generationId },
+      })).toEqual(settled);
+    },
+  );
 });
