@@ -36,6 +36,7 @@ export function GroupConsensusPanel({
   memberCount,
   destinationUndecided,
   setDestinationFor = null,
+  tripConflicts = [],
 }: {
   group: GroupProfile;
   groupTrip: GroupTripPreference;
@@ -43,7 +44,15 @@ export function GroupConsensusPanel({
   destinationUndecided: boolean;
   /** Set when the viewer may edit the trip, so they can act on the answers. */
   setDestinationFor?: { tripId: string; title: string } | null;
+  /**
+   * From findTripConflicts: lets the panel tell "nobody answered" apart from
+   * "no single option works for everyone" per dimension, instead of hiding
+   * a disagreed-on climate behind an agreed (or disagreed) region.
+   */
+  tripConflicts?: { kind: string }[];
 }) {
+  const regionConflict = tripConflicts.some((c) => c.kind === "region");
+  const climateConflict = tripConflicts.some((c) => c.kind === "climate");
   const liked = group.interests.filter((i) => !i.vetoed && i.score > 0);
 
   return (
@@ -131,34 +140,53 @@ export function GroupConsensusPanel({
             <p className="mt-2 text-sm text-stone-500">
               No one has said where they&apos;re up for going yet.
             </p>
-          ) : groupTrip.regions.length === 0 ? (
-            <p className="mt-2 text-sm text-stone-600">
-              No single region works for the whole group yet — worth talking
-              about before picking a place.
-            </p>
           ) : (
-            <dl className="mt-2 space-y-1.5 text-sm">
-              <Row label="Region">
-                {groupTrip.regions
-                  .map((region) => REGION_LABELS[region] ?? region)
-                  .join(" / ")}
-              </Row>
-              {groupTrip.climates.length > 0 && (
-                <Row label="Climate">
-                  {groupTrip.climates
-                    .map((climate) => CLIMATE_LABELS[climate] ?? climate)
-                    .join(" / ")}
-                </Row>
+            <>
+              {groupTrip.regions.length > 0 ? (
+                <dl className="mt-2 space-y-1.5 text-sm">
+                  <Row label="Region">
+                    {groupTrip.regions
+                      .map((region) => REGION_LABELS[region] ?? region)
+                      .join(" / ")}
+                  </Row>
+                </dl>
+              ) : regionConflict ? (
+                <p className="mt-2 text-sm text-stone-600">
+                  No single region works for the whole group yet — worth
+                  talking about before picking a place.
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-stone-500">
+                  No one has said where they&apos;re up for going yet.
+                </p>
+              )}
+              {groupTrip.climates.length > 0 ? (
+                <dl className="mt-2 space-y-1.5 text-sm">
+                  <Row label="Climate">
+                    {groupTrip.climates
+                      .map((climate) => CLIMATE_LABELS[climate] ?? climate)
+                      .join(" / ")}
+                  </Row>
+                </dl>
+              ) : (
+                climateConflict && (
+                  <p className="mt-2 text-sm text-stone-600">
+                    No single climate works for the whole group yet — worth
+                    talking about before picking a place.
+                  </p>
+                )
               )}
               {groupTrip.maxTravelHours !== null && (
-                <Row label="Max travel">
-                  {groupTrip.maxTravelHours}h{" "}
-                  <span className="whitespace-nowrap text-stone-500">
-                    (strictest answer)
-                  </span>
-                </Row>
+                <dl className="mt-2 space-y-1.5 text-sm">
+                  <Row label="Max travel">
+                    {groupTrip.maxTravelHours}h{" "}
+                    <span className="whitespace-nowrap text-stone-500">
+                      (strictest answer)
+                    </span>
+                  </Row>
+                </dl>
               )}
-            </dl>
+            </>
           )}
           {setDestinationFor && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-3">

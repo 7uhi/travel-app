@@ -6,6 +6,7 @@ import {
   applyInterestAnswer,
   clampInterestWeight,
   findPreferenceConflicts,
+  findTripConflicts,
   profileToPromptContext,
   resolveEffectiveProfile,
 } from "@/lib/preferences";
@@ -541,6 +542,116 @@ describe("profileToPromptContext", () => {
         "  budget: 1 on a shoestring, 1 ready to spend",
         "  NIGHTLIFE: 1 keen, 1 would skip",
       ].join("\n"),
+    );
+  });
+
+  it("states incompatible regions explicitly instead of dropping them", () => {
+    const block = profileToPromptContext({
+      ...baseInput,
+      tripPreferences: [
+        tripPref("a", { preferredRegion: "EUROPE" }),
+        tripPref("b", { preferredRegion: "ASIA" }),
+      ],
+    });
+    expect(block).toContain(
+      "Region: no compatible option (want different regions: ASIA vs EUROPE)",
+    );
+  });
+
+  it("keeps an agreed climate visible when regions disagree", () => {
+    const block = profileToPromptContext({
+      ...baseInput,
+      tripPreferences: [
+        tripPref("a", { preferredRegion: "EUROPE", preferredClimate: "WARM" }),
+        tripPref("b", {
+          preferredRegion: "ASIA",
+          preferredClimate: "NO_PREFERENCE",
+        }),
+      ],
+    });
+    expect(block).toContain("Region: no compatible option");
+    expect(block).toContain("climate: WARM");
+  });
+
+  it("stays silent on region/climate when nobody answered them", () => {
+    const block = profileToPromptContext({
+      ...baseInput,
+      tripPreferences: [tripPref("a", { mustDo: "night market" })],
+    });
+    expect(block).not.toContain("Region:");
+    expect(block).not.toContain("climate:");
+    expect(block).not.toContain("no compatible option");
+  });
+
+  it("lists trip-dimension disagreements under CONFLICTS", () => {
+    const block = profileToPromptContext({
+      ...baseInput,
+      tripPreferences: [
+        tripPref("a", { preferredClimate: "WARM" }),
+        tripPref("b", { preferredClimate: "COLD" }),
+      ],
+    });
+    expect(block).toContain("CONFLICTS");
+    expect(block).toContain("climate: want different weather: COLD vs WARM");
+  });
+});
+
+describe("findTripConflicts", () => {
+  it("reports disjoint regions with the largest camp first", () => {
+    const conflicts = findTripConflicts([
+      tripPref("a", { preferredRegion: "EUROPE" }),
+      tripPref("b", { preferredRegion: "ASIA" }),
+      tripPref("c", { preferredRegion: "ASIA" }),
+    ]);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]).toMatchObject({
+      kind: "region",
+      tag: null,
+      severity: 2,
+      forUserIds: ["b", "c"],
+      againstUserIds: ["a"],
+    });
+    expect(conflicts[0].summary).toBe(
+      "want different regions: ASIA vs EUROPE",
+    );
+  });
+
+  it("ignores ANYWHERE, NO_PREFERENCE, and unanswered dimensions", () => {
+    expect(
+      findTripConflicts([
+        tripPref("a", { preferredRegion: "EUROPE" }),
+        tripPref("b", { preferredRegion: "ANYWHERE" }),
+        tripPref("c", {}),
+      ]),
+    ).toEqual([]);
+    expect(
+      findTripConflicts([
+        tripPref("a", { preferredClimate: "WARM" }),
+        tripPref("b", { preferredClimate: "NO_PREFERENCE" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("reports no conflict when everyone agrees or nobody answered", () => {
+    expect(
+      findTripConflicts([
+        tripPref("a", { preferredRegion: "EUROPE" }),
+        tripPref("b", { preferredRegion: "EUROPE" }),
+      ]),
+    ).toEqual([]);
+    expect(findTripConflicts([tripPref("a", {}), tripPref("b", {})])).toEqual(
+      [],
+    );
+    expect(findTripConflicts([])).toEqual([]);
+  });
+
+  it("is stable under input reordering", () => {
+    const prefs = [
+      tripPref("a", { preferredRegion: "EUROPE" }),
+      tripPref("b", { preferredRegion: "ASIA" }),
+    ];
+    expect(findTripConflicts([...prefs].reverse())).toEqual(
+      findTripConflicts(prefs),
     );
   });
 });
