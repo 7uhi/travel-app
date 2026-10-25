@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../generated/prisma/client";
 
 import { expect, test } from "./fixtures";
 import { createUser } from "./seed";

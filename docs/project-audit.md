@@ -223,10 +223,30 @@ error.
   afterward; dev database never touched): full integration 200/200,
   unit 206/206, `tsc --noEmit` clean, production build passes.
 
+## CI fix on PR #27 (2026-10-26)
+
+First observed GitHub run: integration passed; typecheck and the E2E build
+failed with `e2e/ai-suggestions.spec.ts(1,15): TS2305: Module
+'"@prisma/client"' has no exported member 'PrismaClient'`.
+
+- **Root cause**: PR #25 moved main to Prisma 7 + Next 16. Prisma 7
+  generates the client to `generated/prisma` (`provider = "prisma-client"`),
+  so `PrismaClient` comes from `../generated/prisma/client`, not
+  `@prisma/client`. The AI spec was the only file still importing it the
+  Prisma 6 way. Local checks missed this because the local `node_modules`
+  predated the upgrade (TypeScript 5.9.3 / Next 15.5.28 installed, despite
+  the lockfile pinning 7.0.2 / 16.4.3) — earlier "typecheck clean" results
+  describe that stale tree, not a clean install.
+- **Fix**: one-line import in the spec, matching `e2e/fixtures.ts`. No
+  other file needed changes; integration code already used the updated
+  `lib/prisma` and factories from main.
+- **Validated on the PR merge state with `npm ci`**: next 16.4.3,
+  typescript 7.0.2, prisma 7.10.1 — `tsc --noEmit` clean, unit 206/206,
+  integration 200/200 (disposable Postgres), production build passes.
+
 ## Not run (and why)
 
 - `npm audit`: omitted deliberately; no dependency changes were made.
-- CI itself was not observed — the workflow changes above are verified by
-  local runs mirroring them, not by a GitHub run. (Earlier passes recorded
-  integration/e2e as blocked by the sandbox; the verification pass above
-  superseded that via the approval mechanism.)
+- Earlier "not run" notes (sandbox Postgres limits) were superseded by the
+  approval-mechanism runs recorded above; GitHub CI results are reported
+  from the observed runs, not inferred.
