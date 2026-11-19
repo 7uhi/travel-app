@@ -93,7 +93,7 @@ There is no REST API layer — all reads and mutations go through React Server
 Actions in `actions/`, and the only API route is the Auth.js handler.
 
 ```
-auth.ts / auth.config.ts / middleware.ts   Auth wiring (see below)
+auth.ts / auth.config.ts / proxy.ts        Auth wiring (see below)
 prisma/schema.prisma                       Data model + migrations
 prisma.config.ts                           CLI datasource + migration configuration
 generated/prisma/                          Generated client (gitignored)
@@ -227,13 +227,14 @@ components/                                UI (server + client components)
 
 ### Auth architecture
 
-The Auth.js config is split across three files so the middleware can run on
-the edge runtime:
+The Auth.js config is split across three files so the route gate never needs
+the database:
 
-- `auth.config.ts` — edge-safe config: Google provider + JWT sessions (no
-  Prisma, so no Node-only code).
-- `middleware.ts` — adapter-less NextAuth instance that gates `/trips/*`
-  by verifying the session cookie without a database round-trip.
+- `auth.config.ts` — adapter-free config: Google provider + JWT sessions (no
+  Prisma).
+- `proxy.ts` — adapter-less NextAuth instance that gates `/trips/*`
+  by verifying the session cookie without a database round-trip. (Next.js 16
+  renamed the `middleware` file convention to `proxy`.)
 - `auth.ts` — spreads the same config and adds the `PrismaAdapter` for the
   Node runtime (sign-in persists users to Postgres).
 

@@ -2,11 +2,11 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
 /**
- * Edge-safe Auth.js config: no Prisma adapter here, so middleware.ts can
- * bundle it for the edge runtime. auth.ts spreads this and adds the adapter.
+ * Adapter-free Auth.js config: no Prisma here, so proxy.ts can use it without
+ * pulling in the database client. auth.ts spreads this and adds the adapter.
  *
  * JWT session strategy (not database sessions) for the same reason — the
- * middleware can verify the session cookie without a database round-trip.
+ * proxy can verify the session cookie without a database round-trip.
  */
 export default {
   providers: [Google],
