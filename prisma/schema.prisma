@@ -19,6 +19,11 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  /// Set when the person deleted their account. The row stays as an
+  /// anonymous "Former member" so trip ledgers they appear in still add up;
+  /// everything personal is wiped (see actions/account.ts). Sessions of a
+  /// deleted user are refused (lib/account.ts → isActiveUser).
+  deletedAt     DateTime?
 
   accounts       Account[]
   sessions       Session[]

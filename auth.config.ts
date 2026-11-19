@@ -18,7 +18,8 @@ export default {
       return session;
     },
     authorized({ auth, request }) {
-      if (request.nextUrl.pathname.startsWith("/trips")) {
+      const { pathname } = request.nextUrl;
+      if (pathname.startsWith("/trips") || pathname.startsWith("/account")) {
         return Boolean(auth?.user); // false -> redirect to sign-in
       }
       return true;

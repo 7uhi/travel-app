@@ -634,3 +634,23 @@ export interface ActiveInvite {
   /** Whether the viewer may revoke it (the owner, or whoever created it). */
   canRevoke: boolean;
 }
+
+/** Something that has to be resolved before an account can be deleted. */
+export interface AccountDeletionBlocker {
+  tripId: string;
+  title: string;
+  /** owner: owns a trip others are on; owes / owed: unsettled balance. */
+  reason: "owner" | "owes" | "owed";
+  /** The unsettled amount, formatted in the trip's currency (balances only). */
+  amount: string | null;
+  message: string;
+}
+
+/** What deleting the signed-in account would do, trip by trip. */
+export interface AccountDeletionPlan {
+  blockers: AccountDeletionBlocker[];
+  /** Trips only this person is on: deleted along with the account. */
+  tripsToDelete: { id: string; title: string }[];
+  /** Trips with other members: the person leaves them, history stays. */
+  tripsToLeave: { id: string; title: string }[];
+}

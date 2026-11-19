@@ -236,7 +236,28 @@ the database:
   by verifying the session cookie without a database round-trip. (Next.js 16
   renamed the `middleware` file convention to `proxy`.)
 - `auth.ts` — spreads the same config and adds the `PrismaAdapter` for the
-  Node runtime (sign-in persists users to Postgres).
+  Node runtime (sign-in persists users to Postgres), plus a `jwt` callback
+  that ends the session of a user who no longer exists or deleted their
+  account (`lib/account.ts` → `isActiveUser`, memoized per request).
+
+### Account deletion
+
+`/account` → *Delete account* (`actions/account.ts`). The same rules as
+leaving a trip, applied to every trip at once:
+
+- Refused while the person owns a trip other people are on, or has an
+  unsettled balance on any trip; the page lists what to resolve.
+- Trips only they are on are deleted; every other trip they leave through
+  `leaveTrip`'s cleanup (`lib/membership.ts` → `removeFromTrip`).
+- The `User` row is kept, anonymized as "Former member" with `deletedAt`
+  set: expenses, splits, and repayments reference it, and deleting it would
+  cascade them away and rewrite everyone else's balances. Name, email (freed,
+  so the person can sign up again), photo, Google link, sessions, and travel
+  profile are erased.
+- Writes that create rows for a user (`acceptInvite`, `createTrip`,
+  `saveMyProfile`) take a share lock on the user row and refuse once the
+  account is deleted, so a request racing the deletion can't attach new data
+  to it.
 
 ## Testing
 

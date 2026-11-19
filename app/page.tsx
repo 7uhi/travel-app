@@ -43,8 +43,12 @@ const FEATURES = [
   },
 ];
 
-export default async function Home() {
-  const session = await auth();
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ accountDeleted?: string }>;
+}) {
+  const [session, { accountDeleted }] = await Promise.all([auth(), searchParams]);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16">
@@ -75,6 +79,12 @@ export default async function Home() {
               >
                 Your trips
               </Link>
+              <Link
+                href="/account"
+                className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-medium text-stone-600 transition-colors hover:border-stone-400 hover:text-ink"
+              >
+                Account
+              </Link>
               <form
                 action={async () => {
                   "use server";
@@ -91,20 +101,30 @@ export default async function Home() {
             </div>
           </div>
         ) : (
-          <form
-            className="mt-8"
-            action={async () => {
-              "use server";
-              await signIn("google");
-            }}
-          >
-            <button
-              type="submit"
-              className="rounded-full bg-pine px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-pine-dark"
+          <>
+            {accountDeleted === "1" && (
+              <p
+                role="status"
+                className="mt-8 rounded-xl bg-pine-soft px-4 py-3 text-sm text-pine-dark"
+              >
+                Your account has been deleted.
+              </p>
+            )}
+            <form
+              className="mt-8"
+              action={async () => {
+                "use server";
+                await signIn("google");
+              }}
             >
-              Sign in with Google
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="rounded-full bg-pine px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-pine-dark"
+              >
+                Sign in with Google
+              </button>
+            </form>
+          </>
         )}
 
         <Link

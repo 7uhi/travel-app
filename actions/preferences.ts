@@ -10,6 +10,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
+import { ACCOUNT_DELETED, lockActiveUser } from "@/lib/account";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { parseAnswers } from "@/lib/preference-answers";
 import { PROFILE_QUESTIONS, tripDeckFor } from "@/lib/preference-questions";
@@ -232,6 +233,9 @@ export async function saveMyProfile(
 
   try {
     const answeredAt = await prisma.$transaction(async (tx) => {
+      // Waits out an account deletion in progress: a profile written after
+      // it would outlive the deletion that wiped it.
+      if (!(await lockActiveUser(tx, userId))) return null;
       const profile = await tx.travelProfile.upsert({
         where: { userId },
         create: { userId, ...parsed.profileFields },
@@ -256,6 +260,7 @@ export async function saveMyProfile(
 
       return profile.updatedAt;
     });
+    if (!answeredAt) return fail(ACCOUNT_DELETED);
 
     // Every trip the caller is on renders their profile somewhere.
     revalidatePath("/trips", "layout");

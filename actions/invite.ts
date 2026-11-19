@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ACCOUNT_DELETED, lockActiveUser } from "@/lib/account";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { canCreateInvite, canRevokeInvite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -195,6 +196,9 @@ export async function acceptInvite(
       if (invite.expiresAt < new Date()) {
         return { error: "This invite link has expired. Ask for a new one." };
       }
+      // Last in the lock order (Trip, Invite, then User): waits out an
+      // account deletion in progress and refuses if it committed.
+      if (!(await lockActiveUser(tx, userId))) return { error: ACCOUNT_DELETED };
 
       const existing = await tx.tripMember.findUnique({
         where: { userId_tripId: { userId, tripId: invite.tripId } },

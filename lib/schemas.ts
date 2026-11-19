@@ -143,6 +143,8 @@ export const rescheduleInputSchema = z.object({
 
 export const deleteTripConfirmationSchema = text;
 
+export const deleteAccountConfirmationSchema = text;
+
 export const archivedFlagSchema = z.boolean();
 
 /** Roles a member can be moved between; ownership only moves by transfer. */
