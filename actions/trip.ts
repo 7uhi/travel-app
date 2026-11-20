@@ -11,6 +11,7 @@ import type {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { reportError } from "@/lib/report-error";
 import { ACCOUNT_DELETED, lockActiveUser } from "@/lib/account";
 import { fail, type ActionResult } from "@/lib/action-result";
 import {
@@ -202,7 +203,7 @@ export async function createTrip(
     revalidatePath("/trips");
     return { success: true, data: serializeTrip(trip) };
   } catch (error) {
-    console.error("createTrip failed:", error);
+    reportError("createTrip", error);
     return fail("Failed to create trip. Please try again.");
   }
 }
@@ -243,7 +244,7 @@ export async function getMyTrips(): Promise<ActionResult<MyTripSummary[]>> {
       })),
     };
   } catch (error) {
-    console.error("getMyTrips failed:", error);
+    reportError("getMyTrips", error);
     return fail("Failed to load your trips. Please try again.");
   }
 }
@@ -273,7 +274,7 @@ export async function getTripById(
     if (!trip) return fail("Trip not found.");
     return { success: true, data: serializeTrip(trip) };
   } catch (error) {
-    console.error("getTripById failed:", error);
+    reportError("getTripById", error);
     return fail("Failed to load trip. Please try again.");
   }
 }
@@ -369,7 +370,7 @@ export async function updateTripCurrency(
     revalidatePath(`/trips/${tripId}/expenses`);
     return { success: true, data: { currency } };
   } catch (error) {
-    console.error("updateTripCurrency failed:", error);
+    reportError("updateTripCurrency", error);
     return fail("Failed to change the currency. Please try again.");
   }
 }
@@ -421,7 +422,7 @@ export async function updateTripBudget(
     revalidatePath(`/trips/${tripId}/packing`);
     return { success: true, data: { totalBudget: budget } };
   } catch (error) {
-    console.error("updateTripBudget failed:", error);
+    reportError("updateTripBudget", error);
     return fail("Failed to change the budget. Please try again.");
   }
 }
@@ -469,7 +470,7 @@ export async function addActivityToDay(
     revalidatePath(`/trips/${tripDay.tripId}`);
     return { success: true, data: serializeActivity(activity) };
   } catch (error) {
-    console.error("addActivityToDay failed:", error);
+    reportError("addActivityToDay", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2003"
@@ -510,7 +511,7 @@ export async function updateActivity(
     revalidatePath(`/trips/${gate.tripId}`);
     return { success: true, data: serializeActivity(activity) };
   } catch (error) {
-    console.error("updateActivity failed:", error);
+    reportError("updateActivity", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -540,7 +541,7 @@ export async function deleteActivity(
     revalidatePath(`/trips/${gate.tripId}`);
     return { success: true, data: { id: activityId } };
   } catch (error) {
-    console.error("deleteActivity failed:", error);
+    reportError("deleteActivity", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -636,7 +637,7 @@ export async function getTripHeader(
       },
     };
   } catch (error) {
-    console.error("getTripHeader failed:", error);
+    reportError("getTripHeader", error);
     return fail("Failed to load trip. Please try again.");
   }
 }
@@ -670,7 +671,7 @@ export async function getTripDays(
       })),
     };
   } catch (error) {
-    console.error("getTripDays failed:", error);
+    reportError("getTripDays", error);
     return fail("Failed to load the trip's days. Please try again.");
   }
 }
@@ -719,7 +720,7 @@ export async function updateTripDetails(
     revalidateTrip(tripId);
     return { success: true, data: { title, destination } };
   } catch (error) {
-    console.error("updateTripDetails failed:", error);
+    reportError("updateTripDetails", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -869,7 +870,7 @@ export async function rescheduleTrip(
     revalidateTrip(tripId);
     return { success: true, data: outcome.result };
   } catch (error) {
-    console.error("rescheduleTrip failed:", error);
+    reportError("rescheduleTrip", error);
     return fail("Failed to change the trip dates. Please try again.");
   }
 }
@@ -911,7 +912,7 @@ export async function deleteTrip(
 
     await prisma.trip.delete({ where: { id: tripId } });
   } catch (error) {
-    console.error("deleteTrip failed:", error);
+    reportError("deleteTrip", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -959,7 +960,7 @@ export async function setTripArchived(
       data: { archivedAt: archivedAt?.toISOString() ?? null },
     };
   } catch (error) {
-    console.error("setTripArchived failed:", error);
+    reportError("setTripArchived", error);
     return fail("Failed to update your trip list. Please try again.");
   }
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { suggestWindows } from "@/lib/availability";
 import {
@@ -76,7 +77,7 @@ export async function setMyAvailability(
       data: { dates: days.map((d) => d.toISOString()) },
     };
   } catch (error) {
-    console.error("setMyAvailability failed:", error);
+    reportError("setMyAvailability", error);
     return fail("Failed to save your availability. Please try again.");
   }
 }
@@ -136,7 +137,7 @@ export async function getTripAvailability(
       },
     };
   } catch (error) {
-    console.error("getTripAvailability failed:", error);
+    reportError("getTripAvailability", error);
     return fail("Failed to load availability. Please try again.");
   }
 }
@@ -212,7 +213,7 @@ export async function setTripDates(
       },
     };
   } catch (error) {
-    console.error("setTripDates failed:", error);
+    reportError("setTripDates", error);
     return fail("Failed to set trip dates. Please try again.");
   }
 }

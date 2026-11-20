@@ -3,6 +3,7 @@
 import { Prisma, type ActivityIdea as DbActivityIdea } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { sortIdeasByVotes } from "@/lib/ideas";
 import { parseIsoDateTime } from "@/lib/dates";
@@ -65,7 +66,7 @@ export async function getIdeas(
 
     return { success: true, data: sortIdeasByVotes(ideas.map(serializeIdea)) };
   } catch (error) {
-    console.error("getIdeas failed:", error);
+    reportError("getIdeas", error);
     return fail("Failed to load ideas. Please try again.");
   }
 }
@@ -94,7 +95,7 @@ export async function addIdea(
     revalidatePath(`/trips/${tripId}/ideas`);
     return { success: true, data: serializeIdea(idea) };
   } catch (error) {
-    console.error("addIdea failed:", error);
+    reportError("addIdea", error);
     return fail("Failed to add the idea. Please try again.");
   }
 }
@@ -127,7 +128,7 @@ export async function updateIdea(
     revalidatePath(`/trips/${gate.tripId}/ideas`);
     return { success: true, data: serializeIdea(idea) };
   } catch (error) {
-    console.error("updateIdea failed:", error);
+    reportError("updateIdea", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -156,7 +157,7 @@ export async function deleteIdea(
     revalidatePath(`/trips/${gate.tripId}/ideas`);
     return { success: true, data: { id: ideaId } };
   } catch (error) {
-    console.error("deleteIdea failed:", error);
+    reportError("deleteIdea", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -226,7 +227,7 @@ export async function toggleVote(
     revalidatePath(`/trips/${idea.tripId}/ideas`);
     return { success: true, data: { voted } };
   } catch (error) {
-    console.error("toggleVote failed:", error);
+    reportError("toggleVote", error);
     return fail("Failed to save your vote. Please try again.");
   }
 }
@@ -310,7 +311,7 @@ export async function promoteIdea(
     revalidatePath(`/trips/${idea.tripId}/ideas`);
     return { success: true, data: { activityId: activity.id } };
   } catch (error) {
-    console.error("promoteIdea failed:", error);
+    reportError("promoteIdea", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       (error.code === "P2003" || error.code === "P2025")

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { reportError } from "@/lib/report-error";
 import { ACCOUNT_DELETED, lockActiveUser } from "@/lib/account";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { canCreateInvite, canRevokeInvite } from "@/lib/permissions";
@@ -75,7 +76,7 @@ export async function createInvite(
       },
     };
   } catch (error) {
-    console.error("createInvite failed:", error);
+    reportError("createInvite", error);
     return fail("Failed to create invite. Please try again.");
   }
 }
@@ -142,7 +143,7 @@ export async function getInvitePreview(
       },
     };
   } catch (error) {
-    console.error("getInvitePreview failed:", error);
+    reportError("getInvitePreview", error);
     return fail("Failed to open this invite. Please try again.");
   }
 }
@@ -234,7 +235,7 @@ export async function acceptInvite(
         };
       }
     }
-    console.error("acceptInvite failed:", error);
+    reportError("acceptInvite", error);
     return fail("Failed to accept invite. Please try again.");
   }
 }
@@ -296,7 +297,7 @@ export async function getTripInvites(
       })),
     };
   } catch (error) {
-    console.error("getTripInvites failed:", error);
+    reportError("getTripInvites", error);
     return fail("Failed to load invite links. Please try again.");
   }
 }
@@ -364,7 +365,7 @@ export async function revokeInvite(
 
     return { success: true, data: { id: inviteId } };
   } catch (error) {
-    console.error("revokeInvite failed:", error);
+    reportError("revokeInvite", error);
     return fail("Failed to revoke the invite. Please try again.");
   }
 }

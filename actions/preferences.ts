@@ -10,6 +10,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
+import { reportError } from "@/lib/report-error";
 import { ACCOUNT_DELETED, lockActiveUser } from "@/lib/account";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { parseAnswers } from "@/lib/preference-answers";
@@ -89,7 +90,7 @@ export async function getMyPreferences(
       },
     };
   } catch (error) {
-    console.error("getMyPreferences failed:", error);
+    reportError("getMyPreferences", error);
     return fail("Failed to load your preferences. Please try again.");
   }
 }
@@ -125,7 +126,7 @@ export async function getMyPreferenceStatus(
       },
     };
   } catch (error) {
-    console.error("getMyPreferenceStatus failed:", error);
+    reportError("getMyPreferenceStatus", error);
     return fail("Failed to load your preferences. Please try again.");
   }
 }
@@ -184,7 +185,7 @@ export async function getTripPreferences(
       }),
     };
   } catch (error) {
-    console.error("getTripPreferences failed:", error);
+    reportError("getTripPreferences", error);
     return fail("Failed to load preferences. Please try again.");
   }
 }
@@ -206,7 +207,7 @@ export async function getMyProfile(): Promise<
     });
     return { success: true, data: profile ? serializeProfile(profile) : null };
   } catch (error) {
-    console.error("getMyProfile failed:", error);
+    reportError("getMyProfile", error);
     return fail("Failed to load your profile. Please try again.");
   }
 }
@@ -266,7 +267,7 @@ export async function saveMyProfile(
     revalidatePath("/trips", "layout");
     return { success: true, data: { answeredAt: answeredAt.toISOString() } };
   } catch (error) {
-    console.error("saveMyProfile failed:", error);
+    reportError("saveMyProfile", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
@@ -362,7 +363,7 @@ export async function saveMyTripPreferences(
     revalidatePath(`/trips/${tripId}`);
     return { success: true, data: { answeredAt: answeredAt.toISOString() } };
   } catch (error) {
-    console.error("saveMyTripPreferences failed:", error);
+    reportError("saveMyTripPreferences", error);
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         // A concurrent double-submit already created the row.
@@ -399,7 +400,7 @@ export async function clearMyTripPreferences(
     revalidatePath(`/trips/${tripId}`);
     return { success: true, data: { tripId } };
   } catch (error) {
-    console.error("clearMyTripPreferences failed:", error);
+    reportError("clearMyTripPreferences", error);
     return fail("Failed to clear your answers. Please try again.");
   }
 }

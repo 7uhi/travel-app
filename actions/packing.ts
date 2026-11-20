@@ -3,6 +3,7 @@
 import { Prisma, type PackingItem as DbPackingItem } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { prisma } from "@/lib/prisma";
 import {
@@ -64,7 +65,7 @@ export async function getPackingItems(
 
     return { success: true, data: items.map(serializePackingItem) };
   } catch (error) {
-    console.error("getPackingItems failed:", error);
+    reportError("getPackingItems", error);
     return fail("Failed to load the packing list. Please try again.");
   }
 }
@@ -95,7 +96,7 @@ export async function getPersonalPackingItems(
 
     return { success: true, data: items.map(serializePackingItem) };
   } catch (error) {
-    console.error("getPersonalPackingItems failed:", error);
+    reportError("getPersonalPackingItems", error);
     return fail("Failed to load your packing list. Please try again.");
   }
 }
@@ -153,7 +154,7 @@ export async function addPackingItem(
     revalidatePath(`/trips/${tripId}/packing`);
     return { success: true, data: serializePackingItem(item) };
   } catch (error) {
-    console.error("addPackingItem failed:", error);
+    reportError("addPackingItem", error);
     return fail("Failed to add the item. Please try again.");
   }
 }
@@ -182,7 +183,7 @@ export async function togglePackingItem(
     revalidatePath(`/trips/${gate.tripId}/packing`);
     return { success: true, data: serializePackingItem(item) };
   } catch (error) {
-    console.error("togglePackingItem failed:", error);
+    reportError("togglePackingItem", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -258,7 +259,7 @@ export async function updatePackingItem(
     revalidatePath(`/trips/${gate.tripId}/packing`);
     return { success: true, data: serializePackingItem(item) };
   } catch (error) {
-    console.error("updatePackingItem failed:", error);
+    reportError("updatePackingItem", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"
@@ -287,7 +288,7 @@ export async function deletePackingItem(
     revalidatePath(`/trips/${gate.tripId}/packing`);
     return { success: true, data: { id: itemId } };
   } catch (error) {
-    console.error("deletePackingItem failed:", error);
+    reportError("deletePackingItem", error);
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"

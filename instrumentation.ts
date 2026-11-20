@@ -1,4 +1,12 @@
+import * as Sentry from "@sentry/nextjs";
 import type { Instrumentation } from "next";
+
+import { sentryOptions } from "@/lib/sentry";
+
+/** Starts Sentry on the server; it stays off without NEXT_PUBLIC_SENTRY_DSN. */
+export function register() {
+  Sentry.init(sentryOptions);
+}
 
 /**
  * Every uncaught server error — render, route handler, server action — passes
@@ -8,7 +16,8 @@ import type { Instrumentation } from "next";
  * its stack trace.
  *
  * Deliberately logs the route pattern, not the URL: invite paths carry their
- * token, and headers carry session cookies.
+ * token, and headers carry session cookies. The same error goes to Sentry,
+ * whose scrubbing (lib/sentry.ts) strips both.
  */
 export const onRequestError: Instrumentation.onRequestError = async (
   error,
@@ -31,4 +40,5 @@ export const onRequestError: Instrumentation.onRequestError = async (
       renderSource: context.renderSource ?? null,
     }),
   );
+  Sentry.captureRequestError(error, request, context);
 };

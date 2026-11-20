@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import {
   BUILTIN_TEMPLATES,
@@ -75,7 +76,7 @@ export async function getPackingTemplates(
       ],
     };
   } catch (error) {
-    console.error("getPackingTemplates failed:", error);
+    reportError("getPackingTemplates", error);
     return fail("Failed to load packing templates. Please try again.");
   }
 }
@@ -115,7 +116,7 @@ export async function createPackingTemplate(
       },
     };
   } catch (error) {
-    console.error("createPackingTemplate failed:", error);
+    reportError("createPackingTemplate", error);
     return fail("Failed to create the template. Please try again.");
   }
 }
@@ -179,7 +180,7 @@ export async function updatePackingTemplate(
       },
     };
   } catch (error) {
-    console.error("updatePackingTemplate failed:", error);
+    reportError("updatePackingTemplate", error);
     return fail("Failed to update the template. Please try again.");
   }
 }
@@ -217,7 +218,7 @@ export async function deletePackingTemplate(
     revalidatePath(`/trips/${template.tripId}/packing`);
     return { success: true, data: { id: templateId } };
   } catch (error) {
-    console.error("deletePackingTemplate failed:", error);
+    reportError("deletePackingTemplate", error);
     return fail("Failed to delete the template. Please try again.");
   }
 }
@@ -288,7 +289,7 @@ export async function importPackingTemplate(
       data: { imported: fresh.length, skipped: items.length - fresh.length },
     };
   } catch (error) {
-    console.error("importPackingTemplate failed:", error);
+    reportError("importPackingTemplate", error);
     return fail("Failed to import the template. Please try again.");
   }
 }
