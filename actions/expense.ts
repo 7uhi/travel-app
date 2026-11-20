@@ -8,6 +8,7 @@ import type {
 } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import {
   currencyUnitCents,
@@ -127,7 +128,7 @@ export async function createExpense(
     revalidateTripPages(tripId);
     return { success: true, data: serializeExpense(outcome.expense) };
   } catch (error) {
-    console.error("createExpense failed:", error);
+    reportError("createExpense", error);
     return fail("Failed to add expense. Please try again.");
   }
 }
@@ -200,7 +201,7 @@ export async function updateExpense(
     revalidateTripPages(outcome.expense.tripId);
     return { success: true, data: serializeExpense(outcome.expense) };
   } catch (error) {
-    console.error("updateExpense failed:", error);
+    reportError("updateExpense", error);
     return fail("Failed to update expense. Please try again.");
   }
 }
@@ -243,7 +244,7 @@ export async function deleteExpense(
     revalidateTripPages(outcome.tripId);
     return { success: true, data: { id: expenseId } };
   } catch (error) {
-    console.error("deleteExpense failed:", error);
+    reportError("deleteExpense", error);
     return fail("Failed to delete expense. Please try again.");
   }
 }
@@ -355,7 +356,7 @@ export async function recordSettlement(
     revalidatePath(`/trips/${tripId}/expenses`);
     return { success: true, data: serializeSettlement(outcome.settlement) };
   } catch (error) {
-    console.error("recordSettlement failed:", error);
+    reportError("recordSettlement", error);
     return fail("Failed to record the repayment. Please try again.");
   }
 }
@@ -414,7 +415,7 @@ export async function deleteSettlement(
     revalidatePath(`/trips/${outcome.tripId}/expenses`);
     return { success: true, data: { id: settlementId } };
   } catch (error) {
-    console.error("deleteSettlement failed:", error);
+    reportError("deleteSettlement", error);
     return fail("Failed to remove the repayment. Please try again.");
   }
 }
@@ -441,7 +442,7 @@ export async function getTripSettlements(
     });
     return { success: true, data: settlements.map(serializeSettlement) };
   } catch (error) {
-    console.error("getTripSettlements failed:", error);
+    reportError("getTripSettlements", error);
     return fail("Failed to load repayments. Please try again.");
   }
 }
@@ -469,7 +470,7 @@ export async function getTripExpenses(
 
     return { success: true, data: expenses.map(serializeExpense) };
   } catch (error) {
-    console.error("getTripExpenses failed:", error);
+    reportError("getTripExpenses", error);
     return fail("Failed to load expenses. Please try again.");
   }
 }
@@ -498,7 +499,7 @@ export async function getTripSpentCents(
     });
     return { success: true, data: agg._sum.amountCents ?? 0 };
   } catch (error) {
-    console.error("getTripSpentCents failed:", error);
+    reportError("getTripSpentCents", error);
     return fail("Failed to load spending. Please try again.");
   }
 }
@@ -566,7 +567,7 @@ export async function getTripBalances(
       },
     };
   } catch (error) {
-    console.error("getTripBalances failed:", error);
+    reportError("getTripBalances", error);
     return fail("Failed to load balances. Please try again.");
   }
 }

@@ -68,6 +68,8 @@ Prisma 7 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
    | `AUTH_SECRET` | A new secret from `npx auth secret`; don't reuse your local one |
    | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | The Google OAuth client (next step) |
    | `CONTACT_EMAIL` | The public address `/privacy` and `/terms` give for questions and data requests |
+   | `NEXT_PUBLIC_SENTRY_DSN` | Optional: the Sentry project's DSN; error reporting is off without it |
+   | `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Optional: lets the build upload source maps so Sentry shows real file names and lines |
 
    On Supabase, use the transaction pooler (port 6543) for `DATABASE_URL` and
    the session pooler (`…pooler.supabase.com:5432`) for `DIRECT_DATABASE_URL`:
@@ -267,6 +269,26 @@ leaving a trip, applied to every trip at once:
   `saveMyProfile`) take a share lock on the user row and refuse once the
   account is deleted, so a request racing the deletion can't attach new data
   to it.
+
+### Error reporting
+
+Errors go to Sentry when `NEXT_PUBLIC_SENTRY_DSN` is set; without it the SDK
+is disabled (locally, in tests, and in previews unless you add it there).
+Only errors are sent: no tracing, Session Replay, logs, or session pings.
+
+- **Server:** `instrumentation.ts` reports every uncaught render, route, and
+  action error. Server actions that catch an error and return a friendly
+  message call `reportError` (`lib/report-error.ts`) instead.
+- **Browser:** `instrumentation-client.ts` catches uncaught errors; the error
+  boundaries report errors without a digest (ones with a digest came from the
+  server and were already reported).
+- **Privacy** (`lib/sentry.ts`): user info, cookies, headers, request bodies,
+  query strings, database query data, and stack-frame variables are never
+  collected, console breadcrumbs are dropped, and `scrubEvent` removes invite
+  tokens from every URL, message, and context before sending. The privacy
+  policy relies on this, so keep it in sync if you widen collection.
+- The browser posts to the DSN's host, which `next.config.ts` adds to the
+  CSP's `connect-src`.
 
 ## Testing
 

@@ -72,6 +72,10 @@ export default function PrivacyPage() {
           address, browser type, and the pages requested. They&apos;re used to
           keep the service running and secure.
         </li>
+        <li>
+          Error reports when something goes wrong, so we can fix it (see
+          Sentry below).
+        </li>
       </ul>
 
       <h2>Who can see it</h2>
@@ -135,6 +139,12 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Supabase</strong> hosts our database, in the United States.
+        </li>
+        <li>
+          <strong>Sentry</strong> receives error reports when something breaks
+          in Roam. A report includes the error, the page it happened on (with
+          invite links removed), and your browser and device type. It never
+          includes your name, email address, cookies, or anything you typed.
         </li>
         <li>
           <strong>Google</strong> handles sign-in. Your profile photo is loaded

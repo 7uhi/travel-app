@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { formatCents } from "@/lib/format";
 import {
@@ -75,7 +76,7 @@ export async function getTripMembers(
       })),
     };
   } catch (error) {
-    console.error("getTripMembers failed:", error);
+    reportError("getTripMembers", error);
     return fail("Failed to load the trip's members. Please try again.");
   }
 }
@@ -126,7 +127,7 @@ export async function leaveTrip(tripId: string): Promise<ActionResult<never>> {
     });
     if (outcome) return fail(outcome.error);
   } catch (error) {
-    console.error("leaveTrip failed:", error);
+    reportError("leaveTrip", error);
     return fail("Failed to leave the trip. Please try again.");
   }
 
@@ -168,7 +169,7 @@ export async function removeMember(
     revalidateMembership(tripId);
     return { success: true, data: { userId: memberUserId } };
   } catch (error) {
-    console.error("removeMember failed:", error);
+    reportError("removeMember", error);
     return fail("Failed to remove the member. Please try again.");
   }
 }
@@ -214,7 +215,7 @@ export async function setMemberRole(
     revalidateMembership(tripId);
     return { success: true, data: { userId: memberUserId, role: nextRole } };
   } catch (error) {
-    console.error("setMemberRole failed:", error);
+    reportError("setMemberRole", error);
     return fail("Failed to change the member's role. Please try again.");
   }
 }
@@ -255,7 +256,7 @@ export async function transferOwnership(
     revalidateMembership(tripId);
     return { success: true, data: { ownerId: newOwnerId } };
   } catch (error) {
-    console.error("transferOwnership failed:", error);
+    reportError("transferOwnership", error);
     return fail("Failed to transfer ownership. Please try again.");
   }
 }

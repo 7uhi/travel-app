@@ -9,6 +9,7 @@ import {
   DELETED_USER_NAME,
   deletedUserEmail,
 } from "@/lib/account";
+import { reportError } from "@/lib/report-error";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { formatCents } from "@/lib/format";
 import { balanceOf, lockTrip, removeFromTrip, type Tx } from "@/lib/membership";
@@ -46,7 +47,7 @@ export async function getAccountDeletionPlan(): Promise<
   try {
     return { success: true, data: await planDeletion(prisma, userId) };
   } catch (error) {
-    console.error("getAccountDeletionPlan failed:", error);
+    reportError("getAccountDeletionPlan", error);
     return fail("Failed to load your account. Please try again.");
   }
 }
@@ -130,7 +131,7 @@ export async function deleteMyAccount(
     });
     if (outcome) return fail(outcome.error);
   } catch (error) {
-    console.error("deleteMyAccount failed:", error);
+    reportError("deleteMyAccount", error);
     return fail("Failed to delete your account. Please try again.");
   }
 

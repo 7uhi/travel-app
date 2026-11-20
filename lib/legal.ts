@@ -1,7 +1,7 @@
 /** Shared facts for the privacy policy and terms pages. */
 
 /** Shown at the top of both pages; change it whenever either page changes. */
-export const LEGAL_LAST_UPDATED = "November 19, 2026";
+export const LEGAL_LAST_UPDATED = "November 20, 2026";
 
 export const MINIMUM_AGE = 13;
 

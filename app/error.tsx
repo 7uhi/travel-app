@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import Link from "next/link";
 
 /**
@@ -17,6 +18,9 @@ export default function ErrorPage({
 }) {
   useEffect(() => {
     console.error(error);
+    // A digest means the error came from the server, where instrumentation.ts
+    // already reported it; only browser-side errors are new here.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   return (
