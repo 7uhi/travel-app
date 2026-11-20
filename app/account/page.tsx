@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { getAccountDeletionPlan } from "@/actions/account";
 import { auth, signOut } from "@/auth";
 import { DeleteAccountButton } from "@/components/account/DeleteAccountButton";
+import { LegalLinks } from "@/components/legal/LegalPage";
 import { Avatar } from "@/components/Avatar";
 import { LoadError } from "@/components/LoadError";
 import { DELETE_ACCOUNT_PHRASE, DELETED_USER_NAME } from "@/lib/account";
@@ -120,6 +121,8 @@ export default async function AccountPage() {
           </div>
         )}
       </section>
+
+      <LegalLinks className="mt-10" />
     </main>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { auth, signIn, signOut } from "@/auth";
+import { LegalLinks } from "@/components/legal/LegalPage";
 
 const FEATURES = [
   {
@@ -124,6 +125,17 @@ export default async function Home({
                 Sign in with Google
               </button>
             </form>
+            <p className="mt-3 text-xs text-stone-500">
+              By signing in, you agree to the{" "}
+              <Link href="/terms" className="underline underline-offset-2 hover:text-ink">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-ink">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </>
         )}
 
@@ -147,6 +159,8 @@ export default async function Home({
           </li>
         ))}
       </ul>
+
+      <LegalLinks className="mt-12" />
     </main>
   );
 }

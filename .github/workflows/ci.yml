@@ -80,6 +80,8 @@ jobs:
           --health-retries 10
     env:
       AUTH_SECRET: ci-e2e-placeholder
+      # Baked into the statically rendered /privacy and /terms at build time.
+      CONTACT_EMAIL: privacy@example.com
       DATABASE_URL: postgresql://postgres@localhost:5432/travel_test
     steps:
       - uses: actions/checkout@v7

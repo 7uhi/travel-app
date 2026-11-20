@@ -6,7 +6,9 @@
 set -e
 
 if [ "$VERCEL_ENV" = "production" ]; then
-  DATABASE_URL="${DIRECT_DATABASE_URL:?Set DIRECT_DATABASE_URL to the database's direct (non-pooled) connection string}" \
+  # The privacy policy and terms name this address for data requests.
+  : "${CONTACT_EMAIL:?Set CONTACT_EMAIL to the public address for privacy and terms questions}"
+  DATABASE_URL="${DIRECT_DATABASE_URL:?Set DIRECT_DATABASE_URL to the direct (non-pooled) database connection string}" \
     npx prisma migrate deploy
 fi
 
