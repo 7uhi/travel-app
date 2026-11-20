@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Archive, CalendarDays, ChevronDown, MapPin, Users } from "lucide-react";
+import {
+  Archive,
+  CalendarDays,
+  ChevronDown,
+  CircleUserRound,
+  MapPin,
+  Users,
+} from "lucide-react";
 
 import { getMyProfile } from "@/actions/preferences";
 import { getMyTrips } from "@/actions/trip";
@@ -61,7 +68,16 @@ export default async function TripsPage() {
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="font-display text-4xl tracking-tight">Your trips</h1>
-        <NewTripButton />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/account"
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:text-ink"
+          >
+            <CircleUserRound className="h-4 w-4" aria-hidden />
+            Account
+          </Link>
+          <NewTripButton />
+        </div>
       </div>
 
       {/* The only lasting way back into the profile deck: the sign-up redirect

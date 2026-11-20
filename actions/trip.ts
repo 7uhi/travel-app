@@ -11,6 +11,7 @@ import type {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { ACCOUNT_DELETED, lockActiveUser } from "@/lib/account";
 import { fail, type ActionResult } from "@/lib/action-result";
 import {
   isSupportedCurrency,
@@ -182,15 +183,21 @@ export async function createTrip(
   }
 
   try {
-    const trip = await prisma.trip.create({
-      data: {
-        ...tripDates,
-        currency,
-        totalBudget: budget,
-        members: { create: { userId, role: "OWNER" } },
-      },
-      include: TRIP_INCLUDE,
+    // The share lock waits out an account deletion in progress, so a trip
+    // can't be created for an account that was deleted meanwhile.
+    const trip = await prisma.$transaction(async (tx) => {
+      if (!(await lockActiveUser(tx, userId))) return null;
+      return tx.trip.create({
+        data: {
+          ...tripDates,
+          currency,
+          totalBudget: budget,
+          members: { create: { userId, role: "OWNER" } },
+        },
+        include: TRIP_INCLUDE,
+      });
     });
+    if (!trip) return fail(ACCOUNT_DELETED);
 
     revalidatePath("/trips");
     return { success: true, data: serializeTrip(trip) };

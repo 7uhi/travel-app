@@ -1,12 +1,17 @@
 "use server";
 
-import type { Prisma } from "../generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { fail, type ActionResult } from "@/lib/action-result";
-import { currencyUnitCents } from "@/lib/currencies";
 import { formatCents } from "@/lib/format";
+import {
+  balanceOf,
+  lockTrip,
+  removeFromTrip,
+  revokeInvitesBy,
+  type Tx,
+} from "@/lib/membership";
 import { canLeaveTrip, canManageMembers } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
@@ -16,7 +21,6 @@ import {
   parseInput,
 } from "@/lib/schemas";
 import { currentUserId } from "@/lib/session";
-import { computeBalances, roundBalances } from "@/lib/split";
 import type { InviteRole, TripMemberDetail } from "@/types";
 
 /*
@@ -260,13 +264,6 @@ export async function transferOwnership(
 /* Helpers (module-private)                                             */
 /* ------------------------------------------------------------------ */
 
-type Tx = Prisma.TransactionClient;
-
-/** Serializes membership changes and repayments on one trip. */
-async function lockTrip(tx: Tx, tripId: string): Promise<void> {
-  await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`;
-}
-
 /**
  * Checks the caller owns the trip and the target is another member of it.
  * Non-members get "not found"; members already see the member list, so the
@@ -309,66 +306,6 @@ async function ownerGate(
     currency: trip.currency,
     targetName: target.user.name ?? target.user.email,
   };
-}
-
-/**
- * A member's net balance on the trip in cents (positive = is owed), exactly
- * as the Expenses tab shows it: the whole trip's balances rounded to whole
- * currency units (see roundBalances). Gating on the raw figure would refuse
- * someone the tab shows as settled over a fraction of a yen nobody can pay.
- */
-async function balanceOf(
-  tx: Tx,
-  tripId: string,
-  userId: string,
-  currency: string,
-): Promise<number> {
-  const expenses = await tx.expense.findMany({
-    where: { tripId },
-    select: {
-      paidById: true,
-      amountCents: true,
-      splits: { select: { userId: true, amountCents: true } },
-    },
-  });
-  const settlements = await tx.settlement.findMany({
-    where: { tripId },
-    select: { fromUserId: true, toUserId: true, amountCents: true },
-  });
-  return (
-    roundBalances(
-      computeBalances({ expenses, settlements }),
-      currencyUnitCents(currency),
-    ).get(userId) ?? 0
-  );
-}
-
-/**
- * Takes someone off a trip. The ledger stays untouched (see the note at the
- * top of this file); what was only theirs on this trip goes with them —
- * availability, trip preference answers, idea votes, and their personal
- * packing list — shared packing items they'd claimed become unclaimed, and
- * invite links they created stop working.
- */
-async function removeFromTrip(tx: Tx, tripId: string, userId: string): Promise<void> {
-  await tx.tripMember.delete({ where: { userId_tripId: { userId, tripId } } });
-  await tx.availabilityDay.deleteMany({ where: { tripId, userId } });
-  await tx.tripPreference.deleteMany({ where: { tripId, userId } });
-  await tx.activityVote.deleteMany({ where: { userId, idea: { tripId } } });
-  await tx.packingItem.deleteMany({ where: { tripId, ownerId: userId } });
-  await tx.packingItem.updateMany({
-    where: { tripId, assigneeId: userId },
-    data: { assigneeId: null },
-  });
-  await revokeInvitesBy(tx, tripId, userId);
-}
-
-/** Revokes the still-active invite links a member created on a trip. */
-async function revokeInvitesBy(tx: Tx, tripId: string, userId: string): Promise<void> {
-  await tx.invite.updateMany({
-    where: { tripId, createdBy: userId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
 }
 
 /** Member counts and roles show in every section's header and on /trips. */
