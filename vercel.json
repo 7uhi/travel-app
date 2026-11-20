@@ -1,4 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "sh vercel-build.sh"
+  "buildCommand": "sh vercel-build.sh",
+  "regions": ["cle1"]
 }
