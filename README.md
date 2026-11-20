@@ -67,19 +67,28 @@ Prisma 7 + PostgreSQL, and Auth.js (NextAuth v5) with Google sign-in.
    | `DIRECT_DATABASE_URL` | The direct (non-pooled) connection string |
    | `AUTH_SECRET` | A new secret from `npx auth secret`; don't reuse your local one |
    | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | The Google OAuth client (next step) |
+   | `CONTACT_EMAIL` | The public address `/privacy` and `/terms` give for questions and data requests |
 
-   Under Settings → Functions, pick the region closest to the database: each
-   trip page makes several queries per load.
+   On Supabase, use the transaction pooler (port 6543) for `DATABASE_URL` and
+   the session pooler (`…pooler.supabase.com:5432`) for `DIRECT_DATABASE_URL`:
+   the `db.<ref>.supabase.co` direct host is IPv6-only on the free tier, and
+   Vercel can't reach it.
+
+   Functions run in the region `vercel.json` pins (`cle1`, next to the
+   database in us-east-2); change it if the database moves, since each trip
+   page makes several queries per load.
 
 3. **Google sign-in.** Add `https://<your-domain>/api/auth/callback/google`
    to the OAuth client's authorized redirect URIs. While the OAuth consent
    screen's publishing status is *Testing*, only the test users listed there
-   can sign in; switch it to *In production* to let anyone in.
+   can sign in; switch it to *In production* to let anyone in. Google asks
+   for the app's home page, privacy policy (`/privacy`), and terms of
+   service (`/terms`) on the consent screen's branding page.
 
 4. **Deploy.** `vercel.json` runs `vercel-build.sh` as the build command.
    On production deployments it applies pending migrations with
    `prisma migrate deploy` over `DIRECT_DATABASE_URL` before `next build`,
-   and fails the build if that variable is missing. Preview deployments only
+   and fails the build if that variable or `CONTACT_EMAIL` is missing. Preview deployments only
    build.
 
 Google accepts only redirect URIs that are listed exactly, so sign-in doesn't

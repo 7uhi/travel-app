@@ -53,6 +53,9 @@ export default defineConfig({
       AUTH_TRUST_HOST: "true",
       AUTH_URL: BASE_URL,
       DATABASE_URL,
+      // Locally the build runs inside this command, so this reaches the
+      // statically rendered /privacy and /terms; CI sets it for its build step.
+      CONTACT_EMAIL: process.env.CONTACT_EMAIL ?? "privacy@example.com",
       // Off unless the run explicitly enables the mock preview, e.g.
       // AI_SUGGESTIONS_ENABLED=1 npm run test:e2e -- e2e/ai-suggestions.spec.ts
       AI_SUGGESTIONS_ENABLED: process.env.AI_SUGGESTIONS_ENABLED ?? "0",
