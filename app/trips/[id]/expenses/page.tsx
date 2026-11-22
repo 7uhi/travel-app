@@ -65,14 +65,14 @@ export default async function TripExpensesPage({
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <TripHeader trip={trip} activeTab="expenses" />
 
-      <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
+      <section className="mt-10 grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         {/* min-w-0 on both columns: a grid item is otherwise as wide as its
             longest unbreakable line — a truncated expense title or name —
             which pushed the page sideways on phones. */}
         <div className="min-w-0 lg:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-2xl">Expenses</h2>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
               {role === "OWNER" && (
                 <CurrencyPicker
                   tripId={trip.id}

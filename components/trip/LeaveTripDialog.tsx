@@ -51,7 +51,7 @@ export function LeaveTripDialog({
           <li>To come back, you&apos;ll need a new invite link.</li>
         </ul>
         <FormError message={error} />
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-wrap justify-end gap-3 pt-1">
           <button type="button" onClick={close} className={secondaryButtonClass}>
             Cancel
           </button>

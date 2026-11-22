@@ -53,7 +53,7 @@ export default async function TripsPage() {
 
   if (!result.success) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6 text-center">
         <h1 className="font-display text-3xl">Something went wrong</h1>
         <p className="mt-3 text-sm text-stone-600">{result.error}</p>
       </main>
@@ -97,7 +97,7 @@ export default async function TripsPage() {
           Every trip is archived. Unarchive one below, or start a new trip.
         </p>
       ) : (
-        <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
             <TripCard key={trip.id} trip={trip} />
           ))}

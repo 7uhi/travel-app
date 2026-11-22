@@ -144,7 +144,7 @@ export function TripHeader({
           </span>
           {/* ml-auto keeps the actions (and the menu anchored to them) on the
               right edge even when they wrap below the status chip. */}
-          <span className="ml-auto flex items-center gap-2">
+          <span className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
             {trip.role === "OWNER" ? (
               <EditBudgetButton
                 tripId={trip.id}
@@ -166,7 +166,7 @@ export function TripHeader({
         <div
           className={`flex flex-wrap items-end justify-between gap-6 sm:mt-20 ${layout("mt-3", "mt-14")}`}
         >
-          <div>
+          <div className="min-w-0 max-w-full">
             <h1
               className={`font-display tracking-tight sm:text-5xl ${layout("text-3xl", "text-4xl")}`}
             >
@@ -178,9 +178,11 @@ export function TripHeader({
                 "mt-4 gap-x-5 gap-y-2",
               )}`}
             >
-              <span className="flex items-center gap-1.5">
-                <MapPin size={15} className="text-white/70" />
-                {trip.destination ?? "Destination TBD"}
+              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                <MapPin size={15} className="shrink-0 text-white/70" />
+                <span className="min-w-0">
+                  {trip.destination ?? "Destination TBD"}
+                </span>
                 {trip.destination === null && canEditDetails && (
                   <SetDestinationButton
                     tripId={trip.id}
@@ -244,7 +246,7 @@ export function TripHeader({
 
       {/* Stat cards */}
       <section
-        className={`mt-6 gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${layout("hidden", "grid")}`}
+        className={`mt-6 grid-cols-1 gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${layout("hidden", "grid")}`}
       >
         <StatCard label="Countdown">
           {status === "planning" ? (

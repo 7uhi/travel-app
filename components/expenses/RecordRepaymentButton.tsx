@@ -127,7 +127,7 @@ export function RecordRepaymentButton({
               <span className="font-medium">{nameOf(toUserId)}</span>
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="field-row">
               <Field label="Who paid">
                 <select
                   value={fromUserId}
@@ -193,7 +193,7 @@ export function RecordRepaymentButton({
           )}
           <FormError message={error} />
 
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex flex-wrap justify-end gap-3 pt-1">
             <button type="button" onClick={close} className={secondaryButtonClass}>
               Cancel
             </button>

@@ -88,7 +88,7 @@ export function AddPackingItemButton({
             />
           </Field>
 
-          <div className={personal ? undefined : "grid grid-cols-2 gap-4"}>
+          <div className={personal ? undefined : "field-row"}>
             <Field label="Category">
               <select name="category" defaultValue="OTHER" className={inputClass}>
                 {CATEGORY_ORDER.map((c) => (
@@ -114,7 +114,7 @@ export function AddPackingItemButton({
 
           <FormError message={error} />
 
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex flex-wrap justify-end gap-3 pt-1">
             <button type="button" onClick={close} className={secondaryButtonClass}>
               Cancel
             </button>

@@ -1,7 +1,7 @@
 /** Shared form building blocks so every dialog labels and reports errors the same way. */
 
 export const inputClass =
-  "w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30";
+  "block min-h-11 w-full min-w-0 max-w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base outline-none sm:min-h-10 sm:text-sm [&:is(select)]:h-11 sm:[&:is(select)]:h-10 transition-colors focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30";
 
 export const primaryButtonClass =
   "rounded-full bg-pine px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-dark disabled:opacity-60";
@@ -19,7 +19,7 @@ export function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-600">
         {label}
       </span>

@@ -52,7 +52,7 @@ export default async function Home({
   const [session, { accountDeleted }] = await Promise.all([auth(), searchParams]);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16">
+    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-6 py-16">
       <div className="text-center">
         <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-pine font-display text-2xl text-white">
           R
@@ -147,7 +147,7 @@ export default async function Home({
         </Link>
       </div>
 
-      <ul className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map(({ icon: Icon, title, body }) => (
           <li
             key={title}

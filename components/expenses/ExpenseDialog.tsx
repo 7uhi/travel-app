@@ -264,7 +264,7 @@ export function ExpenseDialog({
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="field-row">
           <Field label={`Amount (${currency})`}>
             <input
               name="amount"
@@ -290,7 +290,7 @@ export function ExpenseDialog({
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="field-row">
           <Field label="Category">
             <select
               name="category"
@@ -333,7 +333,7 @@ export function ExpenseDialog({
         />
 
         {mode === "EXACT" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="field-row">
             <Field label={`Tax (${currency}) · optional`}>
               <input
                 {...amountInputProps(currency)}
@@ -374,7 +374,7 @@ export function ExpenseDialog({
           {members.map((m) => (
             <div key={m.id} className="flex items-center gap-3 text-sm">
               {mode === "EQUAL" ? (
-                <label className="flex flex-1 cursor-pointer items-center gap-2.5">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
                   <input
                     type="checkbox"
                     checked={!excluded[m.id]}
@@ -384,13 +384,13 @@ export function ExpenseDialog({
                         [m.id]: !e.target.checked,
                       }))
                     }
-                    className="h-4 w-4 accent-pine"
+                    className="h-4 w-4 shrink-0 accent-pine"
                   />
-                  {m.name}
+                  <span className="min-w-0">{m.name}</span>
                 </label>
               ) : (
                 <>
-                  <span className="flex-1">{m.name}</span>
+                  <span className="min-w-0 flex-1">{m.name}</span>
                   <input
                     {...(mode === "EXACT"
                       ? amountInputProps(currency)
@@ -418,9 +418,9 @@ export function ExpenseDialog({
                             [m.id]: e.target.value,
                           }))
                     }
-                    className="w-24 rounded-lg border border-stone-300 px-2 py-1 text-right text-sm outline-none focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30"
+                    className="w-24 shrink-0 rounded-lg border border-stone-300 px-2 py-1 text-right text-base outline-none sm:text-sm focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30"
                   />
-                  <span aria-hidden className="w-4 text-xs text-stone-600">
+                  <span aria-hidden className="w-4 shrink-0 text-xs text-stone-600">
                     {mode === "PERCENT" ? "%" : ""}
                   </span>
                 </>
@@ -513,7 +513,7 @@ export function ExpenseDialog({
         )}
         <FormError message={error} />
 
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-wrap justify-end gap-3 pt-1">
           <button type="button" onClick={close} className={secondaryButtonClass}>
             Cancel
           </button>

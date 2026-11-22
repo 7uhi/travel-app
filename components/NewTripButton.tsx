@@ -133,7 +133,7 @@ export function NewTripButton() {
           />
 
           {mode === "dates" ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="field-row">
               <Field label="Start date">
                 <input
                   name="startDate"
@@ -153,7 +153,7 @@ export function NewTripButton() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="field-row">
                 <Field label="Window opens">
                   <input
                     name="windowStart"
@@ -188,7 +188,7 @@ export function NewTripButton() {
               </p>
             </>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="field-row">
             <Field label="Currency">
               <select
                 name="currency"
@@ -216,7 +216,7 @@ export function NewTripButton() {
 
           <FormError message={error} />
 
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex flex-wrap justify-end gap-3 pt-1">
             <button type="button" onClick={close} className={secondaryButtonClass}>
               Cancel
             </button>

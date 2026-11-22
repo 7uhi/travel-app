@@ -206,8 +206,8 @@ function ActivityRow({
   onEdit?: () => void;
 }) {
   return (
-    <li className="group flex gap-4 px-5 py-4">
-      <div className="w-14 shrink-0 pt-0.5">
+    <li className="group grid grid-cols-[3.5rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-5 py-4 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto_auto] sm:gap-x-4">
+      <div className="pt-0.5">
         {activity.time ? (
           <span className="inline-block rounded-md bg-stone-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-stone-600">
             {formatTime(activity.time)}
@@ -217,7 +217,7 @@ function ActivityRow({
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <p className="font-medium leading-snug">{activity.title}</p>
         {activity.description && (
           <ActivityDescription text={activity.description} />
@@ -225,13 +225,13 @@ function ActivityRow({
         {activity.locationName && (
           <p className="mt-1.5 flex items-center gap-1 text-xs text-stone-500">
             <MapPin size={12} className="shrink-0 text-stone-400" />
-            {activity.locationName}
+            <span className="min-w-0">{activity.locationName}</span>
           </p>
         )}
       </div>
 
       {activity.cost !== null && activity.cost > 0 && (
-        <p className="shrink-0 pt-0.5 text-sm font-medium tabular-nums text-stone-600">
+        <p className="col-start-2 row-start-2 pt-0.5 text-sm font-medium tabular-nums text-stone-600 sm:col-start-3 sm:row-start-1">
           {formatCurrency(activity.cost, currency)}
         </p>
       )}
@@ -241,7 +241,7 @@ function ActivityRow({
           type="button"
           onClick={onEdit}
           aria-label={`Edit ${activity.title}`}
-          className="shrink-0 self-start rounded-full p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-ink sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus:opacity-100"
+          className="col-start-3 row-start-1 self-start rounded-full p-1.5 text-stone-500 sm:col-start-4 transition-colors hover:bg-stone-100 hover:text-ink sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus:opacity-100"
         >
           <Pencil size={14} />
         </button>

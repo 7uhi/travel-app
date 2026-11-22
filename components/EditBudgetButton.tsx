@@ -117,7 +117,7 @@ export function EditBudgetButton({
 
           <FormError message={error} />
 
-          <div className="flex items-center justify-end gap-3 pt-1">
+          <div className="flex flex-wrap items-center justify-end gap-3 pt-1">
             {totalBudget !== null && (
               <button
                 type="button"

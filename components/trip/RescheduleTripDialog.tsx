@@ -76,7 +76,7 @@ export function RescheduleTripDialog({
       description="The whole plan moves with the trip: day 1 stays day 1, and every activity keeps its day and time."
     >
       <form action={submit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="field-row">
           <Field label="Start date">
             <input
               type="date"
@@ -133,7 +133,7 @@ export function RescheduleTripDialog({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-wrap justify-end gap-3 pt-1">
           <button type="button" onClick={close} className={secondaryButtonClass}>
             Cancel
           </button>

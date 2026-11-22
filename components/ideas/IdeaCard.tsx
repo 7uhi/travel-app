@@ -63,9 +63,9 @@ export function IdeaCard({
   return (
     <li className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-medium">{idea.title}</h3>
+            <h3 className="min-w-0 max-w-full font-medium">{idea.title}</h3>
             {idea.promotedAt && (
               <span className="rounded-full bg-pine-soft px-2 py-0.5 text-[11px] font-medium text-pine">
                 On itinerary
@@ -77,9 +77,9 @@ export function IdeaCard({
           )}
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
             {idea.locationName && (
-              <span className="flex items-center gap-1">
-                <MapPin size={12} />
-                {idea.locationName}
+              <span className="flex min-w-0 max-w-full items-center gap-1">
+                <MapPin size={12} className="shrink-0" />
+                <span className="min-w-0">{idea.locationName}</span>
               </span>
             )}
             {idea.estimatedCost != null && (
@@ -92,14 +92,16 @@ export function IdeaCard({
                 href={idea.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-pine underline-offset-2 transition-colors hover:underline"
+                className="flex min-w-0 max-w-full items-center gap-1 text-pine underline-offset-2 transition-colors hover:underline"
               >
-                <ExternalLink size={12} />
-                {linkLabel(idea.link)}
+                <ExternalLink size={12} className="shrink-0" />
+                <span className="min-w-0">{linkLabel(idea.link)}</span>
               </a>
             )}
             {idea.createdBy && (
-              <span>Suggested by {idea.createdBy.name ?? "a member"}</span>
+              <span className="min-w-0 max-w-full">
+                Suggested by {idea.createdBy.name ?? "a member"}
+              </span>
             )}
           </p>
         </div>
