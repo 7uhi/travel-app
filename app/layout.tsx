@@ -16,6 +16,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Roam — travel planner",
   description: "Plan trips day by day, together.",
+  applicationName: "Roam",
+  appleWebApp: {
+    capable: true,
+    title: "Roam",
+    statusBarStyle: "default",
+  },
 };
 
 // Android shrinks the layout for the keyboard, so dialogs stay reachable.
@@ -23,6 +29,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   interactiveWidget: "resizes-content",
+  themeColor: "#f4f1e9",
 };
 
 export default function RootLayout({

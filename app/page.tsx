@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   CalendarCheck,
   Lightbulb,
@@ -47,9 +48,15 @@ const FEATURES = [
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ accountDeleted?: string }>;
+  searchParams: Promise<{ accountDeleted?: string; source?: string }>;
 }) {
-  const [session, { accountDeleted }] = await Promise.all([auth(), searchParams]);
+  const [session, { accountDeleted, source }] = await Promise.all([
+    auth(),
+    searchParams,
+  ]);
+
+  // The installed app opens here (see manifest.ts) and should land on trips.
+  if (session?.user && source === "pwa") redirect("/trips");
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-6 py-16">
