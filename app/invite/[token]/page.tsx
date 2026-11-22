@@ -35,7 +35,7 @@ export default async function InvitePage({
 
   if (!previewRes.success) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6 text-center">
         <h1 className="font-display text-3xl">This invite won&apos;t open</h1>
         <p className="mt-3 text-sm text-stone-600">{previewRes.error}</p>
         <Link
@@ -58,7 +58,7 @@ export default async function InvitePage({
   ].filter(Boolean);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
+    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-6 py-12">
       <div className="rounded-3xl border border-stone-200/80 bg-white p-8 text-center shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-600">
           {invite.invitedBy ? `${invite.invitedBy} invited you` : "You're invited"}

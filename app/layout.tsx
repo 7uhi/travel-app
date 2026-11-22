@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 
 import "./globals.css";
@@ -18,12 +18,19 @@ export const metadata: Metadata = {
   description: "Plan trips day by day, together.",
 };
 
+// Android shrinks the layout for the keyboard, so dialogs stay reachable.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-dvh font-sans">{children}</body>
     </html>
   );
 }

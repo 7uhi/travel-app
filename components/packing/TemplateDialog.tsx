@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   FormError,
+  inputClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui/form";
@@ -88,28 +89,28 @@ export function TemplateDialog({
             required
             maxLength={80}
             placeholder="Ski Weekend"
-            className={`${inputClass} w-full`}
+            className={inputClass}
             data-autofocus
           />
         </label>
 
         <div>
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className={`${labelClass} min-w-0 flex-1`}>Item</span>
-            <span className={`${labelClass} w-32 shrink-0`}>Category</span>
+          <div className="mb-1.5 grid grid-cols-[minmax(0,1fr)_minmax(0,7rem)_1.75rem] items-center gap-2">
+            <span className={labelClass}>Item</span>
+            <span className={labelClass}>Category</span>
             {/* Spacer matching the remove button so the headers line up. */}
-            <span className="w-7 shrink-0" aria-hidden />
+            <span aria-hidden />
           </div>
           <div className="space-y-2">
             {rows.map((row, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,7rem)_1.75rem] items-center gap-2">
                 <input
                   value={row.name}
                   onChange={(e) => setRow(i, { name: e.target.value })}
                   maxLength={80}
                   placeholder={i === 0 ? "Ski goggles" : "Item"}
                   aria-label={`Item ${i + 1} name`}
-                  className={`${inputClass} min-w-0 flex-1`}
+                  className={inputClass}
                 />
                 <select
                   value={row.category}
@@ -119,7 +120,7 @@ export function TemplateDialog({
                     })
                   }
                   aria-label={`Item ${i + 1} category`}
-                  className={`${inputClass} w-32 shrink-0`}
+                  className={inputClass}
                 >
                   {CATEGORY_ORDER.map((c) => (
                     <option key={c} value={c}>
@@ -153,7 +154,7 @@ export function TemplateDialog({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-wrap justify-end gap-3 pt-1">
           <button type="button" onClick={close} className={secondaryButtonClass}>
             Cancel
           </button>
@@ -170,8 +171,5 @@ export function TemplateDialog({
    (w-full / flex-1 / w-32), and Tailwind resolves conflicting width
    utilities by stylesheet order, not class order, so a baked-in w-full
    would unpredictably win. */
-const inputClass =
-  "rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30";
-
 const labelClass =
   "block text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500";

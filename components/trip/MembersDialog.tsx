@@ -128,7 +128,7 @@ export function MembersDialog({
                           ),
                         )
                       }
-                      className="shrink-0 rounded-xl border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none transition-colors focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30 disabled:opacity-60"
+                      className="shrink-0 rounded-xl border border-stone-300 bg-white px-2.5 py-1.5 text-base outline-none sm:text-sm transition-colors focus:border-pine focus-visible:ring-2 focus-visible:ring-pine/30 disabled:opacity-60"
                     >
                       <option value="EDITOR">Editor</option>
                       <option value="VIEWER">Viewer</option>
@@ -155,7 +155,7 @@ export function MembersDialog({
                             ? `Remove ${name} from the trip? Expenses and repayments they were part of stay in the history.`
                             : `Make ${name} the owner? You'll become an editor, and only they will be able to manage members, change the dates, or delete the trip.`}
                         </p>
-                        <div className="mt-2 flex justify-end gap-2">
+                        <div className="mt-2 flex flex-wrap justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => {

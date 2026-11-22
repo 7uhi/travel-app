@@ -127,7 +127,7 @@ function ShareDialog({
             <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-600">
               People who join with the link can
             </legend>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {ROLE_OPTIONS.map((option) => (
                 <label
                   key={option.role}
@@ -176,7 +176,7 @@ function ShareDialog({
                   value={created.url}
                   aria-label="New invite link"
                   onFocus={(e) => e.currentTarget.select()}
-                  className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none"
+                  className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-base text-stone-700 outline-none sm:text-xs"
                 />
                 <CopyButton url={created.url} />
               </div>

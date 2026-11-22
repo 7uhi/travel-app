@@ -75,7 +75,7 @@ export function PackingTabs({
         <div
           role="tablist"
           aria-label="Packing lists"
-          className="flex rounded-full bg-stone-100 p-1"
+          className="flex max-w-full rounded-full bg-stone-100 p-1"
         >
           {(
             [
@@ -96,7 +96,7 @@ export function PackingTabs({
               tabIndex={tab === key ? 0 : -1}
               onClick={() => setTab(key)}
               onKeyDown={onTabKeyDown}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pine ${
+              className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm font-medium outline-none min-[360px]:px-4 transition-colors focus-visible:ring-2 focus-visible:ring-pine ${
                 tab === key
                   ? "bg-white text-ink shadow-sm"
                   : "text-stone-600 hover:text-ink"

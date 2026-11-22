@@ -61,7 +61,7 @@ export function TripDashboard({
         <PreferencesBanner tripId={trip.id} kind={preferencesNudge} />
       )}
 
-      <section className="mt-10 grid items-start gap-8 lg:grid-cols-3">
+      <section className="mt-10 grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           {scheduled ? (
             <>
@@ -132,7 +132,7 @@ function SpendingByDay({ trip }: { trip: TripWithDays }) {
                   style={{ width: `${(row.cost / maxCost) * 100}%` }}
                 />
               </span>
-              <span className="w-16 shrink-0 text-right font-medium tabular-nums">
+              <span className="min-w-16 shrink-0 whitespace-nowrap text-right font-medium tabular-nums">
                 {formatCurrency(row.cost, trip.currency)}
               </span>
             </li>
@@ -175,8 +175,8 @@ function TripFacts({ trip }: { trip: TripHeaderData }) {
       <dl className="space-y-2.5 text-sm">
         {facts.map(([term, value]) => (
           <div key={term} className="flex justify-between gap-4">
-            <dt className="text-stone-500">{term}</dt>
-            <dd className="text-right font-medium">{value}</dd>
+            <dt className="shrink-0 text-stone-500">{term}</dt>
+            <dd className="min-w-0 text-right font-medium">{value}</dd>
           </div>
         ))}
       </dl>

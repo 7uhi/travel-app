@@ -13,10 +13,35 @@
   --color-clay: #c87f4a;
 }
 
+/* Two form fields side by side, stacking when the container is too narrow. */
+@utility field-row {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+}
+
 body {
   background-color: var(--color-cream);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  /* A long name or URL wraps instead of widening its card and the page. */
+  overflow-wrap: break-word;
+}
+
+/*
+ * iOS Safari gives date and time inputs an intrinsic width that ignores their
+ * container, and centers their value. Removing the native appearance keeps the
+ * picker but lets the field shrink and line up with the text inputs.
+ */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input::-webkit-date-and-time-value {
+  min-height: 1.5em;
+  text-align: left;
 }
 
 /* A modal dialog owns the screen; the page behind it shouldn't scroll. */

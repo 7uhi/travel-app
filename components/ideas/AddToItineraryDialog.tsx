@@ -90,7 +90,7 @@ export function AddToItineraryDialog({
           </select>
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="field-row">
           <Field label="Title">
             <input
               name="title"
@@ -106,7 +106,7 @@ export function AddToItineraryDialog({
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-wrap justify-end gap-3 pt-1">
           <button type="button" onClick={close} className={secondaryButtonClass}>
             Cancel
           </button>

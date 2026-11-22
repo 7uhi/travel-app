@@ -105,10 +105,10 @@ export default async function TripPreferencesPage({
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* items-start/content-start: the aside is far taller than a member
               card, and stretched cards (or rows) are mostly empty white. */}
-          <div className="grid content-start items-start gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 content-start items-start gap-4 sm:grid-cols-2">
             {members.map((member) => (
               <MemberPreferenceCard
                 key={member.userId}

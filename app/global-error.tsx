@@ -26,8 +26,8 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body className="min-h-screen font-sans">
-        <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+      <body className="min-h-dvh font-sans">
+        <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6 text-center">
           <h1 className="text-3xl">Roam ran into a problem</h1>
           <p className="mt-3 text-sm text-stone-600">
             Something went wrong loading the app. Try again in a moment.

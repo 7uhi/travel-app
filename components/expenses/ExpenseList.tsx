@@ -127,14 +127,16 @@ function ExpenseRow({
           <span className="block truncate font-medium leading-snug">
             {expense.description}
           </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-xs text-stone-500">
+          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-stone-500">
             <Avatar
               name={expense.paidBy.name}
               image={expense.paidBy.image}
               size={16}
             />
-            {expense.paidBy.name ?? "Someone"} paid · {label} · split{" "}
-            {splitCount} {splitCount === 1 ? "way" : "ways"}
+            <span className="min-w-0 truncate">
+              {expense.paidBy.name ?? "Someone"} paid · {label} · split{" "}
+              {splitCount} {splitCount === 1 ? "way" : "ways"}
+            </span>
           </span>
         </span>
 

@@ -81,7 +81,7 @@ export function TemplateList({
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {templates.map((template) => {
           const isExpanded = !!expanded[template.id];
           const visibleItems = isExpanded
@@ -93,7 +93,7 @@ export function TemplateList({
               className="flex flex-col rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04)]"
             >
               <div className="mb-1 flex items-start justify-between gap-2">
-                <h3 className="text-sm font-semibold text-ink">
+                <h3 className="min-w-0 text-sm font-semibold text-ink">
                   {template.name}
                 </h3>
                 {!template.builtin && canEdit && (
@@ -126,9 +126,9 @@ export function TemplateList({
 
               <ul className="mb-4 flex-1 space-y-0.5">
                 {visibleItems.map((item, i) => (
-                  <li key={i} className="flex items-baseline gap-2 text-sm">
-                    <span className="text-ink">{item.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-stone-500">
+                  <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                    <span className="min-w-0 text-ink">{item.name}</span>
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-stone-500">
                       {CATEGORY_LABELS[item.category]}
                     </span>
                   </li>

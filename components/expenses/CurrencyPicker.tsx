@@ -77,14 +77,14 @@ export function CurrencyPicker({
 
   return (
     <>
-      <label className="flex items-center gap-2 text-sm text-stone-600">
+      <label className="flex min-w-0 max-w-full items-center gap-2 text-sm text-stone-600">
         Currency
         <select
           value={target ?? currency}
           disabled={pending}
           onChange={(e) => handleChange(e.target.value)}
           aria-label="Trip currency"
-          className="rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-ink outline-none transition-colors focus:border-pine disabled:opacity-60"
+          className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 text-base text-ink outline-none sm:text-sm transition-colors focus:border-pine disabled:opacity-60"
         >
           {CURRENCIES.map((c) => (
             <option key={c.code} value={c.code}>
@@ -125,7 +125,7 @@ export function CurrencyPicker({
             )}
             <FormError message={error} />
 
-            <div className="flex justify-end gap-3 pt-1">
+            <div className="flex flex-wrap justify-end gap-3 pt-1">
               <button
                 type="button"
                 onClick={cancel}

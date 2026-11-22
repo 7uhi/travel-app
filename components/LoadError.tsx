@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function LoadError({ message }: { message: string }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6 text-center">
       <h1 className="font-display text-3xl">Something went wrong</h1>
       <p className="mt-3 text-sm text-stone-600">{message}</p>
       <Link

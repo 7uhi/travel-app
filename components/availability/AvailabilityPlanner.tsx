@@ -5,7 +5,7 @@ import { CalendarCheck } from "lucide-react";
 
 import { setMyAvailability, setTripDates } from "@/actions/availability";
 import { Avatar } from "@/components/Avatar";
-import { FormError } from "@/components/ui/form";
+import { FormError, inputClass } from "@/components/ui/form";
 import { dailyCounts } from "@/lib/availability";
 import { formatDateRange, formatDayDate } from "@/lib/format";
 import type { TripAvailability, TripMemberWithUser } from "@/types";
@@ -158,7 +158,7 @@ export function AvailabilityPlanner({
           </div>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {months.map((month) => (
             <div key={month.key}>
               <p className="mb-2 text-sm font-medium">{month.label}</p>
@@ -218,7 +218,7 @@ export function AvailabilityPlanner({
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-stone-500">
             {mine.size} {mine.size === 1 ? "day" : "days"} marked
             <span className="text-stone-500"> · outlined days are yours</span>
@@ -238,7 +238,7 @@ export function AvailabilityPlanner({
 
       <FormError message={error} />
 
-      <div className="grid items-start gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
         {/* Suggested windows */}
         <div className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
           <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
@@ -310,7 +310,7 @@ export function AvailabilityPlanner({
                 This creates the day-by-day itinerary and closes the poll. It
                 can't be undone from the app.
               </p>
-              <div className="mt-2.5 flex justify-end gap-2">
+              <div className="mt-2.5 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setConfirming(null)}
@@ -351,14 +351,14 @@ export function AvailabilityPlanner({
                   type="date"
                   required
                   aria-label="Start date"
-                  className="min-w-0 flex-1 rounded-lg border border-stone-200 px-2 py-1.5 text-xs outline-none focus:border-pine"
+                  className={`${inputClass} flex-1 basis-32`}
                 />
                 <input
                   name="endDate"
                   type="date"
                   required
                   aria-label="End date"
-                  className="min-w-0 flex-1 rounded-lg border border-stone-200 px-2 py-1.5 text-xs outline-none focus:border-pine"
+                  className={`${inputClass} flex-1 basis-32`}
                 />
                 <button
                   type="submit"

@@ -85,7 +85,7 @@ export function PackingList({
                       ? `Only ${item.assignee?.name ?? "the assigned member"} can check this off`
                       : "Assign this item to a member before checking it off";
                   return (
-                  <li key={item.id} className="flex items-center gap-3 py-2">
+                  <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                     <input
                       type="checkbox"
                       checked={item.packed}
@@ -98,7 +98,7 @@ export function PackingList({
                       className="size-4 shrink-0 accent-pine disabled:opacity-60"
                     />
                     <span
-                      className={`flex-1 text-sm ${
+                      className={`min-w-0 flex-1 basis-32 text-sm ${
                         item.packed
                           ? "text-stone-500 line-through decoration-stone-400"
                           : "text-ink"
@@ -120,7 +120,7 @@ export function PackingList({
                             )
                           }
                           aria-label={`Who's bringing ${item.name}`}
-                          className="max-w-[9rem] rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs text-stone-600 outline-none transition-colors focus:border-pine disabled:opacity-60"
+                          className="ml-auto max-w-[9rem] rounded-lg border border-stone-200 bg-white px-2 py-1 text-base text-stone-600 outline-none sm:text-xs transition-colors focus:border-pine disabled:opacity-60"
                         >
                           <option value="">Unclaimed</option>
                           {members.map((m) => (

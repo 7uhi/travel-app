@@ -113,7 +113,7 @@ export function IdeaDialog({
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="field-row">
           <Field label="Location (optional)">
             <input
               name="locationName"
@@ -148,7 +148,7 @@ export function IdeaDialog({
 
         <FormError message={error} />
 
-        <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           {idea ? (
             <button
               type="button"
@@ -162,7 +162,7 @@ export function IdeaDialog({
           ) : (
             <span />
           )}
-          <div className="flex gap-3">
+          <div className="ml-auto flex flex-wrap justify-end gap-3">
             <button type="button" onClick={close} className={secondaryButtonClass}>
               Cancel
             </button>
